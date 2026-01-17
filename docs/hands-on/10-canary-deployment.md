@@ -8,46 +8,173 @@
 
 ## 2. CDK による実装
 
-`aws_codedeploy` を使用して、Lambda 関数のデプロイ設定を変更します。
+カナリアデプロイの設定を管理する Construct を作成します。
 
-### 2.1 Alias と DeploymentGroup の設定
+### ファイル構成
+```
+infra/
+├── constructs/
+│   ├── __init__.py
+│   ├── database.py
+│   ├── layers.py
+│   ├── functions.py
+│   ├── orchestration.py
+│   ├── api.py
+│   └── deployment.py    # カナリアデプロイ Construct (今回追加)
+```
 
-各 Lambda 関数定義において、`current_version` から `Alias` を作成し、それを CodeDeploy で管理させます。
-
+### infra/constructs/deployment.py
 ```python
 from aws_cdk import (
     aws_codedeploy as codedeploy,
-    aws_lambda as _lambda,
     aws_cloudwatch as cloudwatch,
+    aws_lambda as _lambda,
 )
+from constructs import Construct
 
-# ...
 
-        # Alias の作成 (Prod エイリアス)
-        alias = _lambda.Alias(
+class Deployment(Construct):
+    """カナリアデプロイを管理する Construct"""
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        flight_reserve: _lambda.Function,
+        hotel_reserve: _lambda.Function,
+        payment_process: _lambda.Function,
+    ) -> None:
+        super().__init__(scope, id)
+
+        # ========================================================================
+        # Flight Reserve - カナリアデプロイ設定
+        # ========================================================================
+        self.flight_reserve_alias = _lambda.Alias(
             self, "FlightReserveAlias",
             alias_name="Prod",
-            version=flight_reserve_lambda.current_version,
+            version=flight_reserve.current_version,
         )
 
-        # アラームの作成 (例: エラー率)
-        failure_alarm = cloudwatch.Alarm(
+        flight_failure_alarm = cloudwatch.Alarm(
             self, "FlightReserveFailureAlarm",
-            metric=flight_reserve_lambda.metric_errors(),
+            metric=flight_reserve.metric_errors(),
             threshold=1,
             evaluation_periods=1,
         )
 
-        # CodeDeploy 設定
         codedeploy.LambdaDeploymentGroup(
             self, "FlightReserveDeploymentGroup",
-            alias=alias,
+            alias=self.flight_reserve_alias,
             deployment_config=codedeploy.LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES,
-            alarms=[failure_alarm],
+            alarms=[flight_failure_alarm],
+        )
+
+        # ========================================================================
+        # Hotel Reserve - カナリアデプロイ設定
+        # ========================================================================
+        self.hotel_reserve_alias = _lambda.Alias(
+            self, "HotelReserveAlias",
+            alias_name="Prod",
+            version=hotel_reserve.current_version,
+        )
+
+        hotel_failure_alarm = cloudwatch.Alarm(
+            self, "HotelReserveFailureAlarm",
+            metric=hotel_reserve.metric_errors(),
+            threshold=1,
+            evaluation_periods=1,
+        )
+
+        codedeploy.LambdaDeploymentGroup(
+            self, "HotelReserveDeploymentGroup",
+            alias=self.hotel_reserve_alias,
+            deployment_config=codedeploy.LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES,
+            alarms=[hotel_failure_alarm],
+        )
+
+        # ========================================================================
+        # Payment Process - カナリアデプロイ設定
+        # ========================================================================
+        self.payment_process_alias = _lambda.Alias(
+            self, "PaymentProcessAlias",
+            alias_name="Prod",
+            version=payment_process.current_version,
+        )
+
+        payment_failure_alarm = cloudwatch.Alarm(
+            self, "PaymentProcessFailureAlarm",
+            metric=payment_process.metric_errors(),
+            threshold=1,
+            evaluation_periods=1,
+        )
+
+        codedeploy.LambdaDeploymentGroup(
+            self, "PaymentProcessDeploymentGroup",
+            alias=self.payment_process_alias,
+            deployment_config=codedeploy.LambdaDeploymentConfig.CANARY_10PERCENT_5MINUTES,
+            alarms=[payment_failure_alarm],
         )
 ```
 
-**注意**: Step Functions は Lambda の ARN を直接参照するのではなく、この `Alias` を参照するように変更する必要があります。
+### infra/constructs/\_\_init\_\_.py (更新)
+```python
+from .database import Database
+from .layers import Layers
+from .functions import Functions
+from .orchestration import Orchestration
+from .api import Api
+from .deployment import Deployment
+
+__all__ = ["Database", "Layers", "Functions", "Orchestration", "Api", "Deployment"]
+```
+
+### serverless_trip_saga_stack.py (更新)
+```python
+from aws_cdk import Stack
+from constructs import Construct
+from infra.constructs import Database, Layers, Functions, Orchestration, Api, Deployment
+
+
+class ServerlessTripSagaStack(Stack):
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        database = Database(self, "Database")
+        layers = Layers(self, "Layers")
+        functions = Functions(
+            self, "Functions",
+            table=database.table,
+            common_layer=layers.common_layer,
+        )
+
+        # Deployment Construct (カナリアデプロイ)
+        deployment = Deployment(
+            self, "Deployment",
+            flight_reserve=functions.flight_reserve,
+            hotel_reserve=functions.hotel_reserve,
+            payment_process=functions.payment_process,
+        )
+
+        # Orchestration は Alias を参照するように変更
+        orchestration = Orchestration(
+            self, "Orchestration",
+            flight_reserve=deployment.flight_reserve_alias,  # Alias を使用
+            flight_cancel=functions.flight_cancel,
+            hotel_reserve=deployment.hotel_reserve_alias,    # Alias を使用
+            hotel_cancel=functions.hotel_cancel,
+            payment_process=deployment.payment_process_alias, # Alias を使用
+        )
+
+        api = Api(
+            self, "Api",
+            state_machine=orchestration.state_machine,
+            get_trip=functions.get_trip,
+            list_trips=functions.list_trips,
+        )
+```
+
+**注意**: Step Functions の `Orchestration` Construct は Lambda の ARN を直接参照するのではなく、`Deployment` Construct が作成した `Alias` を参照するように変更します。
 
 ## 3. デプロイと確認
 

@@ -48,22 +48,50 @@ Powertools を使用してイベントをパースし、Application Layer を呼
 pytest tests/unit/services/flight/
 ```
 
-## 5. CDK スタックへの定義追加
+## 5. CDK Construct への定義追加
 
-実装した Lambda 関数を CDK スタックに追加します。
+実装した Lambda 関数を管理する Construct を作成します。
 
+### ファイル構成
+```
+infra/
+├── constructs/
+│   ├── __init__.py
+│   ├── database.py      # Hands-on 02 で作成済み
+│   ├── layers.py        # Hands-on 03 で作成済み
+│   └── functions.py     # Lambda Functions Construct (今回追加)
+```
+
+### infra/constructs/functions.py
 ```python
-# serverless_trip_saga_python_stack.py
+from aws_cdk import (
+    aws_dynamodb as dynamodb,
+    aws_lambda as _lambda,
+)
+from constructs import Construct
+
+
+class Functions(Construct):
+    """Lambda 関数を管理する Construct"""
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        table: dynamodb.Table,
+        common_layer: _lambda.LayerVersion,
+    ) -> None:
+        super().__init__(scope, id)
 
         # ========================================================================
         # Flight Service Lambda
         # ========================================================================
-        flight_reserve_lambda = _lambda.Function(
+        self.flight_reserve = _lambda.Function(
             self, "FlightReserveLambda",
-            runtime=_lambda.Runtime.PYTHON_3_9,
+            runtime=_lambda.Runtime.PYTHON_3_12,
             handler="services.flight.handlers.reserve.lambda_handler",
             code=_lambda.Code.from_asset("."),
-            layers=[common_layer], # Hands-on 03 で作成したLayer
+            layers=[common_layer],
             environment={
                 "TABLE_NAME": table.table_name,
                 "POWERTOOLS_SERVICE_NAME": "flight-service",
@@ -71,7 +99,42 @@ pytest tests/unit/services/flight/
         )
 
         # DynamoDB への書き込み権限を付与
-        table.grant_write_data(flight_reserve_lambda)
+        table.grant_write_data(self.flight_reserve)
+```
+
+### infra/constructs/\_\_init\_\_.py (更新)
+```python
+from .database import Database
+from .layers import Layers
+from .functions import Functions
+
+__all__ = ["Database", "Layers", "Functions"]
+```
+
+### serverless_trip_saga_stack.py (更新)
+```python
+from aws_cdk import Stack
+from constructs import Construct
+from infra.constructs import Database, Layers, Functions
+
+
+class ServerlessTripSagaStack(Stack):
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        # Database Construct
+        database = Database(self, "Database")
+
+        # Layers Construct
+        layers = Layers(self, "Layers")
+
+        # Functions Construct
+        functions = Functions(
+            self, "Functions",
+            table=database.table,
+            common_layer=layers.common_layer,
+        )
 ```
 
 ## 6. デプロイと動作確認

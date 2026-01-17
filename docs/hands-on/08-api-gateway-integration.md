@@ -12,19 +12,52 @@
 ## 2. DynamoDB GSI の追加 (参照要件への対応)
 検索機能（ユーザーごとの予約履歴取得など）を実現するため、保留にしていた GSI を追加します。
 
-### CDK実装 (`serverless_trip_saga_python_stack.py`)
-`TripTable` に Global Secondary Index (GSI) を追加します。
+### infra/constructs/database.py (更新)
+`Database` Construct に Global Secondary Index (GSI) を追加します。
 
 *   **Index Name**: `GSI1`
 *   **Partition Key**: `GSI1PK` (String) - 例: `USER#<user_id>`
 *   **Sort Key**: `GSI1SK` (String) - 例: `DATE#<iso_timestamp>`
 
 ```python
-        # GSIの追加
-        table.add_global_secondary_index(
+from aws_cdk import (
+    RemovalPolicy,
+    aws_dynamodb as dynamodb,
+)
+from constructs import Construct
+
+
+class Database(Construct):
+    """DynamoDB テーブルを管理する Construct"""
+
+    def __init__(self, scope: Construct, id: str) -> None:
+        super().__init__(scope, id)
+
+        self.table = dynamodb.Table(
+            self, "TripTable",
+            partition_key=dynamodb.Attribute(
+                name="PK",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="SK",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY
+        )
+
+        # GSI の追加 (参照用)
+        self.table.add_global_secondary_index(
             index_name="GSI1",
-            partition_key=dynamodb.Attribute(name="GSI1PK", type=dynamodb.AttributeType.STRING),
-            sort_key=dynamodb.Attribute(name="GSI1SK", type=dynamodb.AttributeType.STRING),
+            partition_key=dynamodb.Attribute(
+                name="GSI1PK",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="GSI1SK",
+                type=dynamodb.AttributeType.STRING
+            ),
         )
 ```
 
@@ -45,10 +78,185 @@
 
 ## 4. API Gateway の構築
 
-### 4.1 RestApi の定義とIAM権限
-CDK で `apigateway.RestApi` を定義します。Step Functions を呼び出すための IAM Role も設定します。
+### ファイル構成
+```
+infra/
+├── constructs/
+│   ├── __init__.py
+│   ├── database.py      # Hands-on 02 で作成、GSI追加済み
+│   ├── layers.py        # Hands-on 03 で作成済み
+│   ├── functions.py     # Hands-on 04, 05 で作成済み (Query Lambda追加)
+│   ├── orchestration.py # Hands-on 06, 07 で作成済み
+│   └── api.py           # API Gateway Construct (今回追加)
+```
 
-### 4.2 リソースとメソッドの定義
+### 4.1 Functions Construct に Query Lambda を追加
+
+```python
+# infra/constructs/functions.py に追加
+
+        # ========================================================================
+        # Trip Query Service Lambda (今回追加)
+        # ========================================================================
+        self.get_trip = _lambda.Function(
+            self, "GetTripLambda",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="services.trip.handlers.get_trip.lambda_handler",
+            code=_lambda.Code.from_asset("."),
+            layers=[common_layer],
+            environment={
+                "TABLE_NAME": table.table_name,
+                "POWERTOOLS_SERVICE_NAME": "trip-service",
+            },
+        )
+
+        self.list_trips = _lambda.Function(
+            self, "ListTripsLambda",
+            runtime=_lambda.Runtime.PYTHON_3_12,
+            handler="services.trip.handlers.list_trips.lambda_handler",
+            code=_lambda.Code.from_asset("."),
+            layers=[common_layer],
+            environment={
+                "TABLE_NAME": table.table_name,
+                "POWERTOOLS_SERVICE_NAME": "trip-service",
+            },
+        )
+
+        # 読み取り権限を付与
+        table.grant_read_data(self.get_trip)
+        table.grant_read_data(self.list_trips)
+```
+
+### 4.2 API Gateway Construct の作成
+
+#### infra/constructs/api.py
+```python
+from aws_cdk import (
+    aws_apigateway as apigateway,
+    aws_iam as iam,
+    aws_lambda as _lambda,
+    aws_stepfunctions as sfn,
+)
+from constructs import Construct
+
+
+class Api(Construct):
+    """API Gateway を管理する Construct"""
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        state_machine: sfn.StateMachine,
+        get_trip: _lambda.Function,
+        list_trips: _lambda.Function,
+    ) -> None:
+        super().__init__(scope, id)
+
+        # ========================================================================
+        # REST API 定義
+        # ========================================================================
+        self.rest_api = apigateway.RestApi(
+            self, "TripApi",
+            rest_api_name="Trip Booking API",
+        )
+
+        # ========================================================================
+        # Step Functions 実行用 IAM Role
+        # ========================================================================
+        sfn_role = iam.Role(
+            self, "ApiGatewayStepFunctionsRole",
+            assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
+        )
+        state_machine.grant_start_execution(sfn_role)
+
+        # ========================================================================
+        # リソース定義
+        # ========================================================================
+        trips_resource = self.rest_api.root.add_resource("trips")
+        trip_resource = trips_resource.add_resource("{trip_id}")
+
+        # POST /trips -> Step Functions (非同期)
+        trips_resource.add_method(
+            "POST",
+            apigateway.AwsIntegration(
+                service="states",
+                action="StartExecution",
+                options=apigateway.IntegrationOptions(
+                    credentials_role=sfn_role,
+                    request_templates={
+                        "application/json": f'{{"stateMachineArn": "{state_machine.state_machine_arn}", "input": "$util.escapeJavaScript($input.body)"}}'
+                    },
+                    integration_responses=[
+                        apigateway.IntegrationResponse(status_code="200")
+                    ],
+                ),
+            ),
+            method_responses=[apigateway.MethodResponse(status_code="200")],
+        )
+
+        # GET /trips -> Lambda (list_trips)
+        trips_resource.add_method(
+            "GET",
+            apigateway.LambdaIntegration(list_trips),
+        )
+
+        # GET /trips/{trip_id} -> Lambda (get_trip)
+        trip_resource.add_method(
+            "GET",
+            apigateway.LambdaIntegration(get_trip),
+        )
+```
+
+### 4.3 infra/constructs/\_\_init\_\_.py (更新)
+```python
+from .database import Database
+from .layers import Layers
+from .functions import Functions
+from .orchestration import Orchestration
+from .api import Api
+
+__all__ = ["Database", "Layers", "Functions", "Orchestration", "Api"]
+```
+
+### 4.4 serverless_trip_saga_stack.py (更新)
+```python
+from aws_cdk import Stack
+from constructs import Construct
+from infra.constructs import Database, Layers, Functions, Orchestration, Api
+
+
+class ServerlessTripSagaStack(Stack):
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        database = Database(self, "Database")
+        layers = Layers(self, "Layers")
+        functions = Functions(
+            self, "Functions",
+            table=database.table,
+            common_layer=layers.common_layer,
+        )
+        orchestration = Orchestration(
+            self, "Orchestration",
+            flight_reserve=functions.flight_reserve,
+            flight_cancel=functions.flight_cancel,
+            hotel_reserve=functions.hotel_reserve,
+            hotel_cancel=functions.hotel_cancel,
+            payment_process=functions.payment_process,
+        )
+
+        # API Gateway Construct
+        api = Api(
+            self, "Api",
+            state_machine=orchestration.state_machine,
+            get_trip=functions.get_trip,
+            list_trips=functions.list_trips,
+        )
+```
+
+### 4.5 エンドポイント一覧
 
 | Method | Resource | Integration | Auth | Description |
 | :--- | :--- | :--- | :--- | :--- |
@@ -56,7 +264,7 @@ CDK で `apigateway.RestApi` を定義します。Step Functions を呼び出す
 | `GET` | `/trips/{trip_id}` | **Lambda** (`get_trip`) | IAM / Cog | 予約詳細の取得 |
 | `GET` | `/trips` | **Lambda** (`list_trips`) | IAM / Cog | 自分の予約一覧取得 |
 
-### 4.3 Step Functions Integration (POST /trips) の詳細
+### 4.6 Step Functions Integration (POST /trips) の詳細
 * **AwsIntegration**: Step Functions の `StartExecution` アクションを API Gateway から直接呼び出します。
 * **IAM Role**: API Gateway が Step Functions を実行できる権限を付与します。
 * **非同期APIの挙動 (Asynchronous Pattern)**:

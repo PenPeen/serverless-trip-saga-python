@@ -17,16 +17,45 @@
 
 ## 3. CDK によるパイプライン定義
 
-新しい Stack ファイル `pipeline_stack.py` を作成（または既存 Stack と分離）することを推奨します。
+CI/CD パイプラインはアプリケーションスタックとは別に管理します。
 
+### ファイル構成
+```
+infra/
+├── constructs/          # アプリケーション用 Construct (既存)
+│   ├── database.py
+│   ├── layers.py
+│   ├── functions.py
+│   ├── orchestration.py
+│   └── api.py
+pipeline_stack.py        # CI/CD パイプライン (別Stack)
+serverless_trip_saga_stack.py
+```
+
+### pipeline_stack.py
 ```python
 from aws_cdk import (
     Stack,
-    pipelines as pipelines,
+    Stage,
+    pipelines,
 )
+from constructs import Construct
+from serverless_trip_saga_stack import ServerlessTripSagaStack
+
+
+class ApplicationStage(Stage):
+    """アプリケーションスタックをまとめるステージ"""
+
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
+        super().__init__(scope, id, **kwargs)
+
+        ServerlessTripSagaStack(self, "ServerlessTripSaga")
+
 
 class PipelineStack(Stack):
-    def __init__(self, scope, id, **kwargs):
+    """CI/CD パイプラインを定義するスタック"""
+
+    def __init__(self, scope: Construct, id: str, **kwargs) -> None:
         super().__init__(scope, id, **kwargs)
 
         pipeline = pipelines.CodePipeline(
@@ -35,20 +64,37 @@ class PipelineStack(Stack):
                 "Synth",
                 input=pipelines.CodePipelineSource.connection(
                     "my-org/my-repo", "main",
-                    connection_arn="arn:aws:codestar-connections:..." # 事前に作成が必要
+                    connection_arn="arn:aws:codestar-connections:..."  # 事前に作成が必要
                 ),
                 commands=[
                     "npm install -g aws-cdk",
                     "pip install -r requirements.txt",
-                    "pip install -r layers/common_layer/requirements.txt", # テスト用に依存解決
-                    "pytest tests/unit", # テスト実行！ここが失敗するとデプロイされない
+                    "pip install -r layers/common_layer/requirements.txt",  # テスト用に依存解決
+                    "pytest tests/unit",  # テスト実行！ここが失敗するとデプロイされない
                     "cdk synth"
                 ]
             )
         )
 
         # アプリケーションステージの追加
-        pipeline.add_stage(MyApplicationStage(self, "Prod"))
+        pipeline.add_stage(ApplicationStage(self, "Prod"))
+```
+
+### app.py (更新)
+```python
+import aws_cdk as cdk
+from serverless_trip_saga_stack import ServerlessTripSagaStack
+from pipeline_stack import PipelineStack
+
+app = cdk.App()
+
+# 開発環境: 直接デプロイ用
+ServerlessTripSagaStack(app, "ServerlessTripSagaDev")
+
+# 本番環境: パイプライン経由
+PipelineStack(app, "PipelineStack")
+
+app.synth()
 ```
 
 *注: GitHub Connection は事前に AWS コンソールで作成し、ARN を取得しておく必要があります。*
