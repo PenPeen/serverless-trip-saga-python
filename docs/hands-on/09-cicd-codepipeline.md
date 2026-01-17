@@ -46,7 +46,7 @@ class PipelineStack(Stack):
                 ]
             )
         )
-        
+
         # アプリケーションステージの追加
         pipeline.add_stage(MyApplicationStage(self, "Prod"))
 ```
@@ -72,3 +72,8 @@ class PipelineStack(Stack):
 次は、段階的なデプロイ（カナリアリリース）を設定します。
 
 👉 **[Hands-on 10: Canary Deployment](./10-canary-deployment.md)** へ進む
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/cicd-pipeline`
+*   **コミットメッセージ**: `CI/CDパイプラインの構築`

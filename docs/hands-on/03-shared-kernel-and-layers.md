@@ -104,3 +104,8 @@ cdk deploy
 共通基盤が整いました。いよいよ具体的な業務ロジックの実装に入ります。
 
 👉 **[Hands-on 04: Service Implementation - Flight](./04-service-implementation-flight.md)** へ進む
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/shared-kernel`
+*   **コミットメッセージ**: `共有カーネルの実装`

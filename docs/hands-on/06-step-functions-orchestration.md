@@ -10,3 +10,8 @@ Start -> Reserve Flight -> Reserve Hotel -> Process Payment -> Succeed
 * **データの受け渡し (Context Propagation)**:
     * 単純な `output_path="$.Payload"` ではなく、**`result_path`** の使用を推奨します（例: `result_path="$.results.flight"`）。
     * これにより、前のステップの入力データ（予約IDや顧客情報）を上書きせずに保持したまま、後続のステップや補償トランザクション（キャンセル処理）で参照可能になります。
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/step-functions`
+*   **コミットメッセージ**: `Step Functionsによるオーケストレーション`

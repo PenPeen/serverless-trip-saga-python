@@ -87,3 +87,8 @@ Payment Service のコードを一時的に修正し、必ず例外を投げる�
 次は、このシステムを外部（Webフロントエンドなど）から利用できるように、API を公開します。
 
 👉 **[Hands-on 08: API Gateway Integration](./08-api-gateway-integration.md)** へ進む
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/saga-compensation`
+*   **コミットメッセージ**: `Saga補償トランザクションの実装`

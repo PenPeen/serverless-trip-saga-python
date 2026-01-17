@@ -132,3 +132,8 @@ find services -type d -exec touch {}/__init__.py \;
 
 これでプロジェクトの基盤は整いました。
 次は、**[Hands-on 02: データ永続化層の実装 (DynamoDB)](./02-dynamodb-design.md)** に進み、データベースの構築を行います。
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/project-setup`
+*   **コミットメッセージ**: `プロジェクト構成のセットアップ`

@@ -69,7 +69,7 @@ pytest tests/unit/services/flight/
                 "POWERTOOLS_SERVICE_NAME": "flight-service",
             },
         )
-        
+
         # DynamoDB への書き込み権限を付与
         table.grant_write_data(flight_reserve_lambda)
 ```
@@ -88,3 +88,8 @@ Flight Service の基本実装が完了しました。
 次は、同様のパターンで他のサービスを効率的に実装します。
 
 👉 **[Hands-on 05: Service Implementation - Hotel & Payment](./05-service-implementation-hotel-payment.md)** へ進む
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/flight-service`
+*   **コミットメッセージ**: `Flightサービスの実装`

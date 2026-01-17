@@ -14,3 +14,8 @@
 ## CDK実装
 * `dynamodb.Table` を定義。Partition Key=`PK`, Sort Key=`SK`。
 * `billing_mode=PAY_PER_REQUEST`
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/dynamodb-design`
+*   **コミットメッセージ**: `DynamoDBテーブルの定義`

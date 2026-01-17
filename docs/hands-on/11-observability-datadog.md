@@ -15,3 +15,8 @@
 * **概要**: 追加アカウント不要で実装可能です。
 * CDKで `tracing=Tracing.ACTIVE` を Lambda および Step Functions State Machine に設定。
 * CloudWatch ServiceLens コンソールでサービスマップとトレースを確認。
+
+## ブランチとコミットメッセージ
+
+*   **ブランチ名**: `feature/observability`
+*   **コミットメッセージ**: `可観測性の設定`
