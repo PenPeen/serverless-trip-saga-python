@@ -19,23 +19,36 @@
 ## CDK実装
 * `dynamodb.Table` を定義。Partition Key=`PK`, Sort Key=`SK`。
 * `billing_mode=PAY_PER_REQUEST`
+* **Construct パターン**を採用し、リソースをモジュール化します。
+
+### ファイル構成
+```
+infra/
+├── constructs/
+│   ├── __init__.py
+│   └── database.py      # DynamoDB Construct
+serverless_trip_saga_stack.py  # メインStack
+```
 
 ### サンプルコード
+
+#### 1. infra/constructs/database.py
 ```python
 from aws_cdk import (
-    Stack,
     RemovalPolicy,
     aws_dynamodb as dynamodb,
 )
 from constructs import Construct
 
-class ServerlessTripSagaStack(Stack):
 
-    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
-        super().__init__(scope, construct_id, **kwargs)
+class Database(Construct):
+    """DynamoDB テーブルを管理する Construct"""
+
+    def __init__(self, scope: Construct, id: str) -> None:
+        super().__init__(scope, id)
 
         # DynamoDB Table Definition
-        table = dynamodb.Table(
+        self.table = dynamodb.Table(
             self, "TripTable",
             partition_key=dynamodb.Attribute(
                 name="PK",
@@ -50,6 +63,31 @@ class ServerlessTripSagaStack(Stack):
             # 本番環境では RETAIN (デフォルト) を推奨
             removal_policy=RemovalPolicy.DESTROY
         )
+```
+
+#### 2. infra/constructs/\_\_init\_\_.py
+```python
+from .database import Database
+
+__all__ = ["Database"]
+```
+
+#### 3. serverless_trip_saga_stack.py
+```python
+from aws_cdk import Stack
+from constructs import Construct
+from infra.constructs import Database
+
+
+class ServerlessTripSagaStack(Stack):
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        # Database Construct
+        database = Database(self, "Database")
+
+        # 他の Construct から参照する場合: database.table
 ```
 
 ## ブランチとコミットメッセージ

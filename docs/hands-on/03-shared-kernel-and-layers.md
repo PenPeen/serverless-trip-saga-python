@@ -24,37 +24,83 @@ aws-lambda-powertools[all]
 pydantic>=2.0.0
 ```
 
-### 2.2 CDK スタックへの Layer 定義追加
+### 2.2 CDK Construct への Layer 定義追加
 
-CDK スタックファイル (`serverless_trip_saga_python_stack.py`) に、Layer の定義を追加します。
+Lambda Layer を管理する Construct を作成します。
 
+#### ファイル構成
+```
+infra/
+├── constructs/
+│   ├── __init__.py
+│   ├── database.py      # Hands-on 02 で作成済み
+│   └── layers.py        # Lambda Layers Construct (今回追加)
+```
+
+#### infra/constructs/layers.py
 ```python
 from aws_cdk import (
-    # ... 他のインポート
+    BundlingOptions,
     aws_lambda as _lambda,
 )
+from constructs import Construct
 
-# ... クラス内
-        # ========================================================================
-        # Lambda Layer (Common Dependencies)
-        # ========================================================================
-        common_layer = _lambda.LayerVersion(
+
+class Layers(Construct):
+    """Lambda Layers を管理する Construct"""
+
+    def __init__(self, scope: Construct, id: str) -> None:
+        super().__init__(scope, id)
+
+        # Common Layer (Powertools, Pydantic)
+        self.common_layer = _lambda.LayerVersion(
             self, "CommonLayer",
             code=_lambda.Code.from_asset(
                 "layers/common_layer",
                 bundling=BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_9.bundling_image,
+                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
                     command=[
                         "bash", "-c",
                         "pip install -r requirements.txt -t /asset-output/python"
                     ],
                 ),
             ),
-            compatible_runtimes=[_lambda.Runtime.PYTHON_3_9],
+            compatible_runtimes=[_lambda.Runtime.PYTHON_3_12],
             description="Common dependencies (Powertools, Pydantic)",
         )
 ```
 *(注: BundlingOptions を使用するには Docker が必要です。Dockerなしの場合は事前に `pip install -t` する方法もあります)*
+
+#### infra/constructs/\_\_init\_\_.py (更新)
+```python
+from .database import Database
+from .layers import Layers
+
+__all__ = ["Database", "Layers"]
+```
+
+#### serverless_trip_saga_stack.py (更新)
+```python
+from aws_cdk import Stack
+from constructs import Construct
+from infra.constructs import Database, Layers
+
+
+class ServerlessTripSagaStack(Stack):
+
+    def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+
+        # Database Construct
+        database = Database(self, "Database")
+
+        # Layers Construct
+        layers = Layers(self, "Layers")
+
+        # 他の Construct から参照する場合:
+        # - database.table
+        # - layers.common_layer
+```
 
 ## 3. Shared Kernel の実装 (共通コード)
 

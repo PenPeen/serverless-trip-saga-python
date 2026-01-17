@@ -18,53 +18,143 @@ Step Functions のエラーハンドリング機能 (`add_catch`) を利用し�
 
 ## 3. CDK による実装
 
-Hands-on 06 の定義を拡張します。
+Hands-on 06 で作成した `Orchestration` Construct を拡張し、補償トランザクションを追加します。
 
-### 3.1 補償タスクの定義 (Cancel Lambda)
+### infra/constructs/orchestration.py (更新)
 
 ```python
-        # Cancel Tasks
-        cancel_hotel_task = tasks.LambdaInvoke(
-            self, "CancelHotel",
-            lambda_function=hotel_cancel_lambda,
-            retry_on_service_exceptions=True, # 取り消し自体の失敗対策（リトライ）
-        ).next(sfn.Fail(self, "HotelCancelled"))
+from aws_cdk import (
+    aws_stepfunctions as sfn,
+    aws_stepfunctions_tasks as tasks,
+    aws_lambda as _lambda,
+)
+from constructs import Construct
 
-        cancel_flight_task = tasks.LambdaInvoke(
-            self, "CancelFlight",
-            lambda_function=flight_cancel_lambda,
+
+class Orchestration(Construct):
+    """Step Functions ステートマシンを管理する Construct"""
+
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        flight_reserve: _lambda.Function,
+        flight_cancel: _lambda.Function,
+        hotel_reserve: _lambda.Function,
+        hotel_cancel: _lambda.Function,
+        payment_process: _lambda.Function,
+    ) -> None:
+        super().__init__(scope, id)
+
+        # ========================================================================
+        # 正常系タスク
+        # ========================================================================
+        reserve_flight_task = tasks.LambdaInvoke(
+            self, "ReserveFlight",
+            lambda_function=flight_reserve,
+            result_path="$.results.flight",
+        )
+
+        reserve_hotel_task = tasks.LambdaInvoke(
+            self, "ReserveHotel",
+            lambda_function=hotel_reserve,
+            result_path="$.results.hotel",
+        )
+
+        process_payment_task = tasks.LambdaInvoke(
+            self, "ProcessPayment",
+            lambda_function=payment_process,
+            result_path="$.results.payment",
+        )
+
+        # ========================================================================
+        # 補償タスク (Cancel)
+        # 注意: Step Functions では同じタスクを複数のチェーンで再利用できないため、
+        #       チェーンごとに別のタスクインスタンスを作成する
+        # ========================================================================
+
+        # Payment 失敗時のロールバック用
+        cancel_hotel_from_payment = tasks.LambdaInvoke(
+            self, "CancelHotelFromPayment",
+            lambda_function=hotel_cancel,
             retry_on_service_exceptions=True,
-        ).next(sfn.Fail(self, "FlightCancelled"))
-```
+            result_path="$.results.hotel_cancel",
+        )
 
-### 3.2 エラーハンドリング (add_catch) の追加
+        cancel_flight_from_payment = tasks.LambdaInvoke(
+            self, "CancelFlightFromPayment",
+            lambda_function=flight_cancel,
+            retry_on_service_exceptions=True,
+            result_path="$.results.flight_cancel",
+        )
 
-正常系タスクに `add_catch` を追加し、エラー時に補償タスクへ遷移させます。
+        # Hotel 失敗時のロールバック用
+        cancel_flight_from_hotel = tasks.LambdaInvoke(
+            self, "CancelFlightFromHotel",
+            lambda_function=flight_cancel,
+            retry_on_service_exceptions=True,
+            result_path="$.results.flight_cancel",
+        )
 
-```python
-        # Payment 失敗 -> Hotel キャンセルへ
+        # ========================================================================
+        # 失敗ステート (チェーンごとに別インスタンス)
+        # ========================================================================
+        saga_failed_from_payment = sfn.Fail(self, "SagaFailedFromPayment", error="SagaFailed")
+        saga_failed_from_hotel = sfn.Fail(self, "SagaFailedFromHotel", error="SagaFailed")
+
+        # ========================================================================
+        # ロールバックチェーン
+        # ========================================================================
+        # Payment 失敗時: Hotel Cancel -> Flight Cancel -> Fail
+        rollback_from_payment = (
+            cancel_hotel_from_payment
+            .next(cancel_flight_from_payment)
+            .next(saga_failed_from_payment)
+        )
+
+        # Hotel 失敗時: Flight Cancel -> Fail
+        rollback_from_hotel = cancel_flight_from_hotel.next(saga_failed_from_hotel)
+
+        # ========================================================================
+        # エラーハンドリング (add_catch)
+        # ========================================================================
         process_payment_task.add_catch(
-            cancel_hotel_task,
+            rollback_from_payment,
             result_path="$.error_info"
         )
 
-        # Hotel 失敗 (および Payment失敗後のHotelキャンセル完了後) -> Flight キャンセルへ
-        # 注意: チェーン構造を工夫する必要があります。
-        # 実際には並列処理や、直列的な逆順実行フローを定義します。
+        reserve_hotel_task.add_catch(
+            rollback_from_hotel,
+            result_path="$.error_info"
+        )
+
+        # ========================================================================
+        # State Machine Definition
+        # ========================================================================
+        definition = (
+            reserve_flight_task
+            .next(reserve_hotel_task)
+            .next(process_payment_task)
+            .next(sfn.Succeed(self, "BookingSucceeded"))
+        )
+
+        self.state_machine = sfn.StateMachine(
+            self, "TripBookingStateMachine",
+            definition=definition,
+        )
 ```
 
-*(実装のヒント: `cancel_hotel_task` の `next` を `cancel_flight_task` に繋げることで、連鎖的なロールバックを実現します)*
-
-#### 改良後のチェーン例:
+### serverless_trip_saga_stack.py (更新)
 ```python
-        # ロールバックフローのチェーン: Cancel Hotel -> Cancel Flight -> Fail
-        rollback_chain = cancel_hotel_task.next(cancel_flight_task).next(sfn.Fail(self, "SagaFailed"))
-
-        # Payment 失敗時
-        process_payment_task.add_catch(rollback_chain, ...)
-
-        # Hotel 失敗時 (Hotelキャンセルは不要なので、直接Flightキャンセルへ)
-        reserve_hotel_task.add_catch(cancel_flight_task, ...)
+        # Orchestration Construct (補償トランザクション追加)
+        orchestration = Orchestration(
+            self, "Orchestration",
+            flight_reserve=functions.flight_reserve,
+            flight_cancel=functions.flight_cancel,
+            hotel_reserve=functions.hotel_reserve,
+            hotel_cancel=functions.hotel_cancel,
+            payment_process=functions.payment_process,
+        )
 ```
 
 ## 4. デプロイと検証（カオスエンジニアリング）
