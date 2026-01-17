@@ -1,7 +1,5 @@
 from aws_cdk import (
-    # Duration,
     Stack,
-    # aws_sqs as sqs,
 )
 from constructs import Construct
 
