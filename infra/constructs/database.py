@@ -13,12 +13,12 @@ class Database(Construct):
         self.table = dynamodb.Table(
             self, "TripTable",
             partition_key = dynamodb.Attribute(
-                name = "PK",
-                type = dynamodb.AttributeType.STRING
+                name="PK",
+                type=dynamodb.AttributeType.STRING
             ),
             sort_key = dynamodb.Attribute(
-                name = "SK",
-                type = dynamodb.AttributeType.STRING
+                name="SK",
+                type=dynamodb.AttributeType.STRING
             ),
             billing_mode = dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy = RemovalPolicy.DESTROY
