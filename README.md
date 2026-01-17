@@ -9,19 +9,19 @@ AWSサーバーレスアーキテクチャ（Lambda, DynamoDB, Step Functions）
 ```mermaid
 stateDiagram-v2
     [*] --> ReserveFlight
-    
+
     ReserveFlight --> ReserveHotel: Success
     ReserveFlight --> FlightBookingFailed: Fail
-    
+
     ReserveHotel --> ProcessPayment: Success
     ReserveHotel --> CancelFlight: Fail (Compensation)
-    
+
     ProcessPayment --> BookingConfirmed: Success
     ProcessPayment --> CancelHotel: Fail (Compensation)
-    
+
     CancelHotel --> CancelFlight
     CancelFlight --> BookingFailed
-    
+
     BookingConfirmed --> [*]
     BookingFailed --> [*]
     FlightBookingFailed --> [*]
@@ -33,19 +33,19 @@ stateDiagram-v2
 * **Language:** Python 3.9+
 * **IaC:** AWS CDK (Python)
 * **Orchestration:** AWS Step Functions
-* **Compute:** AWS Lambda
+* **Compute:** AWS Lambda (with Lambda Layers for dependencies)
 * **Database:** Amazon DynamoDB (Single Table Design)
+* **Observability:**
+    * Datadog APM (Distributed Tracing, Metrics)
+    * Amazon CloudWatch
 * **CI/CD:**
-* AWS CodePipeline (パイプライン管理)
-* AWS CodeBuild (テスト・ビルド)
-* AWS CodeDeploy (Lambdaのカナリア/段階的デプロイ)
-
-
+    * AWS CodePipeline (パイプライン管理)
+    * AWS CodeBuild (テスト・ビルド・並列実行)
+    * AWS CodeDeploy (Lambdaのカナリア/段階的デプロイ)
 * **Libraries:**
-* `aws-lambda-powertools`: ログ、トレース、冪等性
-* `pydantic`: モデル定義、検証
-
-
+    * `aws-lambda-powertools`: ログ、トレース、冪等性
+    * `pydantic`: ドメインモデル定義、バリデーション
+    * `datadog-lambda`: Datadog計装用ライブラリ
 
 ## シナリオ
 
@@ -63,9 +63,13 @@ stateDiagram-v2
 
 1. **Pipeline**: `main` ブランチへのプッシュをトリガーにCodePipelineが起動。
 2. **Build & Test**: CodeBuildにてユニットテスト、Lintチェック、CDK Synthを実行。
+    * **Optimization**: `node_modules` や `venv` などの依存関係を除外してパッケージングし、ビルド時間を短縮。
+    * **PR Validation**: Pull Request作成時には、一時的な検証環境（Ephemeral Stack）を構築し、マージ前にE2Eテストを実行する戦略を推奨。
 3. **Safe Deployment**: CodeDeployを使用し、Lambda関数を段階的に更新（例: `Linear10PercentEvery1Minute`）。新バージョンにエラーが発生した場合、自動ロールバックを行う。
 
 ## ディレクトリ構成
+
+サーバーレスDDD（ドメイン駆動設計）に基づき、責務と依存関係を明確に分離しています。
 
 ```text
 serverless-trip-saga-python/
@@ -79,9 +83,10 @@ serverless-trip-saga-python/
 ├── src/                     # アプリケーションコード
 │   ├── shared/              # 共通ライブラリ
 │   └── trip/                # Tripコンテキスト
-│       ├── domain/          # ビジネスロジック
-│       ├── adapters/        # リポジトリ
 │       └── handlers/        # Lambdaハンドラー
+│       ├── applications/    # [Application Layer] ユースケース進行役
+│       ├── domain/          # ビジネスロジック
+│       └── adapters/        # DynamoDB/API実装
 ├── tests/                   # ユニットテスト・E2Eテスト
 └── buildspec.yml            # CodeBuild定義書
 
