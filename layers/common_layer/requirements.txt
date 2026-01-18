@@ -1,2 +1,2 @@
-aws-lambda-powertools[all]
+aws-lambda-powertools
 pydantic>=2.0.0
