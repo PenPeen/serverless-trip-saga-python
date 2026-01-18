@@ -1,8 +1,8 @@
-from aws_cdk import (
-    Stack,
-)
+from aws_cdk import Stack
 from constructs import Construct
-from infra.constructs import Database   # infra/constructs/__init__.py を load
+
+from infra.constructs import Database, Layers
+
 
 class ServerlessTripSagaStack(Stack):
 
@@ -10,3 +10,4 @@ class ServerlessTripSagaStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
 
         database = Database(self, "Database")
+        layers = Layers(self, "Layers")
