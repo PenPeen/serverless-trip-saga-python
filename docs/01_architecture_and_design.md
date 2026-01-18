@@ -271,7 +271,7 @@ source .venv/bin/activate
 ```text
 aws-cdk-lib==2.114.1
 constructs>=10.0.0
-aws-lambda-powertools[all]
+aws-lambda-powertools
 pydantic
 ```
 

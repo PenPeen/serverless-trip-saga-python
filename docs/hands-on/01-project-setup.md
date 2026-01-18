@@ -58,12 +58,12 @@ source .venv/bin/activate
 ```text
 aws-cdk-lib==2.114.1
 constructs>=10.0.0
-aws-lambda-powertools[all]
+aws-lambda-powertools
 pydantic>=2.0.0
 pytest
 ```
 
-*   `aws-lambda-powertools[all]`: ログ出力、トレース、メトリクスなどのユーティリティ。
+*   `aws-lambda-powertools`: ログ出力、冪等性などのユーティリティ。
 *   `pydantic`: データバリデーション用。
 *   `pytest`: テスト用フレームワーク。
 

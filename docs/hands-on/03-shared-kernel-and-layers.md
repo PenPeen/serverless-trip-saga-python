@@ -20,7 +20,7 @@ mkdir -p layers/common_layer
 
 `layers/common_layer/requirements.txt`:
 ```text
-aws-lambda-powertools[all]
+aws-lambda-powertools
 pydantic>=2.0.0
 ```
 
