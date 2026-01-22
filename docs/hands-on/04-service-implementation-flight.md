@@ -26,7 +26,7 @@ DDD (ドメイン駆動設計) のレイヤー構造を適用し、単体テス�
 ```python
 from enum import Enum
 from typing import Optional
-from uuid import uuid4
+from decimal import Decimal
 from pydantic import BaseModel, Field
 
 # Value Object: 予約ステータス
@@ -35,18 +35,18 @@ class BookingStatus(str, Enum):
     CONFIRMED = "CONFIRMED"
     CANCELLED = "CANCELLED"
 
-# Value Object: 予約ID (不変性を持たせる)
+# Value Object: 予約ID
 class BookingID(BaseModel):
-    value: str = Field(default_factory=lambda: str(uuid4()))
+    value: str
 
 # Entity: フライト予約
 class Booking(BaseModel):
-    booking_id: BookingID = Field(default_factory=BookingID)
+    booking_id: BookingID
     trip_id: str
     flight_number: str
     departure_time: str
     arrival_time: str
-    price: float
+    price: Decimal
     status: BookingStatus = BookingStatus.PENDING
 
     # ドメインメソッド: 予約確定 (振る舞いの実装)
@@ -93,18 +93,33 @@ class DynamoDBRepository:
 ### 3.3 Application Layer: 予約ユースケース
 `services/flight/applications/reserve_flight.py` を作成します。
 アプリケーションサービスは、ドメインオブジェクトの生成とリポジトリへの保存を調整（オーケストレーション）します。
+ここでは `TypedDict` を使用して入力データの構造を明確にします。
 
 ```python
-from services.flight.domain.booking import Booking
+from typing import TypedDict
+from decimal import Decimal
+from services.flight.domain.booking import Booking, BookingID
 from services.flight.adapters.dynamodb_repository import DynamoDBRepository
+
+# 入力データの構造定義
+class FlightDetails(TypedDict):
+    flight_number: str
+    departure_time: str
+    arrival_time: str
+    price: Decimal
 
 class ReserveFlightService:
     def __init__(self, repository: DynamoDBRepository):
         self.repository = repository
 
-    def reserve(self, trip_id: str, flight_details: dict) -> dict:
-        # 1. Entityの生成
+    def reserve(self, trip_id: str, flight_details: FlightDetails) -> dict:
+        # 1. IDの生成 (冪等性担保のため trip_id から決定論的に生成)
+        # 同じ trip_id でのリクエストは常に同じ booking_id になる
+        booking_id_value = f"flight_for_{trip_id}"
+
+        # 2. Entityの生成
         booking = Booking(
+            booking_id=BookingID(value=booking_id_value),
             trip_id=trip_id,
             flight_number=flight_details["flight_number"],
             departure_time=flight_details["departure_time"],
@@ -112,13 +127,13 @@ class ReserveFlightService:
             price=flight_details["price"]
         )
 
-        # 2. ドメインロジックの実行 (必要であれば)
+        # 3. ドメインロジックの実行 (必要であれば)
         # booking.validate_flight_schedule() など
 
-        # 3. 永続化
+        # 4. 永続化
         self.repository.save(booking)
 
-        # 4. 結果の返却 (DTOへの変換推奨だが今回は簡易化)
+        # 5. 結果の返却 (DTOへの変換推奨だが今回は簡易化)
         return booking.model_dump(mode="json")
 ```
 
@@ -127,6 +142,7 @@ class ReserveFlightService:
 外部からの入力を受け取り、アプリケーションサービスを呼び出します。
 
 ```python
+from decimal import Decimal
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from services.flight.applications.reserve_flight import ReserveFlightService
@@ -134,6 +150,11 @@ from services.flight.adapters.dynamodb_repository import DynamoDBRepository
 
 logger = Logger()
 tracer = Tracer()
+
+# Global scope initialization (Cold Start execution)
+# Lambda のコールドスタート時に一度だけ実行され、接続が再利用されます
+repository = DynamoDBRepository()
+service = ReserveFlightService(repository)
 
 @logger.inject_lambda_context
 @tracer.capture_lambda_handler
@@ -144,11 +165,17 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         # Step Functions からの入力 or API Gateway からの入力に対応
         # ここでは単純化のため直接 event を参照
         trip_id = event.get("trip_id")
-        flight_details = event.get("flight_details", {})
-
-        repository = DynamoDBRepository()
-        service = ReserveFlightService(repository)
         
+        # 入力データを TypedDict の構造に合わせて準備 (Decimal変換など)
+        raw_flight_details = event.get("flight_details", {})
+        flight_details = {
+            "flight_number": raw_flight_details.get("flight_number"),
+            "departure_time": raw_flight_details.get("departure_time"),
+            "arrival_time": raw_flight_details.get("arrival_time"),
+            "price": Decimal(str(raw_flight_details.get("price", "0")))
+        }
+
+        # Global instance is used
         result = service.reserve(trip_id, flight_details)
         
         return {
@@ -157,7 +184,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         }
     except Exception as e:
         logger.exception("Failed to reserve flight")
-        raise e
+        raise
 ```
 
 ## 4. 単体テストの実装 (Unit Testing)
