@@ -30,7 +30,7 @@ stateDiagram-v2
 
 ## 技術スタック
 
-* **Language:** Python 3.9+
+* **Language:** Python 3.14+
 * **IaC:** AWS CDK (Python)
 * **Orchestration:** AWS Step Functions
 * **Compute:** AWS Lambda (with Lambda Layers for dependencies)
@@ -98,7 +98,7 @@ serverless-trip-saga-python/
 
 * AWS CLI
 * Node.js & AWS CDK
-* Python 3.9+ & Poetry (または pip)
+* Python 3.14+ & Poetry (または pip)
 * Docker (Lambdaビルド用)
 * GitHub Personal Access Token (CodePipeline連携用)
 

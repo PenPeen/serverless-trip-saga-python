@@ -58,14 +58,14 @@ class Layers(Construct):
             code=_lambda.Code.from_asset(
                 "layers/common_layer",
                 bundling=BundlingOptions(
-                    image=_lambda.Runtime.PYTHON_3_12.bundling_image,
+                    image=_lambda.Runtime.PYTHON_3_14.bundling_image,
                     command=[
                         "bash", "-c",
                         "pip install -r requirements.txt -t /asset-output/python"
                     ],
                 ),
             ),
-            compatible_runtimes=[_lambda.Runtime.PYTHON_3_12],
+            compatible_runtimes=[_lambda.Runtime.PYTHON_3_14],
             description="Common dependencies (Powertools, Pydantic)",
         )
 ```

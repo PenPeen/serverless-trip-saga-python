@@ -10,7 +10,7 @@
 ## 2. 前提条件 (Prerequisites)
 以下のツールがインストールされていることを確認してください。
 
-*   **Python 3.9 以上**: `python --version`
+*   **Python 3.14 以上**: `python --version`
 *   **Node.js 18 以上**: `node --version`
 *   **AWS CLI**: `aws --version` (かつ `aws configure` で認証情報が設定済みであること)
 *   **AWS CDK CLI**: `cdk --version`

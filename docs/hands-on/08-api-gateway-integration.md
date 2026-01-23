@@ -100,7 +100,7 @@ infra/
         # ========================================================================
         self.get_trip = _lambda.Function(
             self, "GetTripLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.trip.handlers.get_trip.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
@@ -112,7 +112,7 @@ infra/
 
         self.list_trips = _lambda.Function(
             self, "ListTripsLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.trip.handlers.list_trips.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],

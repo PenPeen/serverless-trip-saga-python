@@ -228,7 +228,7 @@ Lambda関数の更新において、**CodeDeployを使用した段階的デプ�
 以下の手順に従って、プロジェクトの初期化を行ってください。
 
 ### Prerequisites
-*   Python 3.9+
+*   Python 3.14+
 *   Node.js 18+
 *   AWS CLI (configured)
 *   AWS CDK CLI (`npm install -g aws-cdk`)

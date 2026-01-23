@@ -42,7 +42,7 @@ class Functions(Construct):
         self.flight_reserve = _lambda.Function(...)
         self.flight_cancel = _lambda.Function(
             self, "FlightCancelLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.flight.handlers.cancel.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
@@ -57,7 +57,7 @@ class Functions(Construct):
         # ========================================================================
         self.hotel_reserve = _lambda.Function(
             self, "HotelReserveLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.hotel.handlers.reserve.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
@@ -69,7 +69,7 @@ class Functions(Construct):
 
         self.hotel_cancel = _lambda.Function(
             self, "HotelCancelLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.hotel.handlers.cancel.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
@@ -84,7 +84,7 @@ class Functions(Construct):
         # ========================================================================
         self.payment_process = _lambda.Function(
             self, "PaymentProcessLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.payment.handlers.process.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
@@ -96,7 +96,7 @@ class Functions(Construct):
 
         self.payment_refund = _lambda.Function(
             self, "PaymentRefundLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.payment.handlers.refund.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],

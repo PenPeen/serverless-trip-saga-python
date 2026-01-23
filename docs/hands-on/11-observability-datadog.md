@@ -100,7 +100,7 @@ class Observability(Construct):
 
         self.flight_reserve = _lambda.Function(
             self, "FlightReserveLambda",
-            runtime=_lambda.Runtime.PYTHON_3_12,
+            runtime=_lambda.Runtime.PYTHON_3_14,
             handler="services.flight.handlers.reserve.lambda_handler",
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
