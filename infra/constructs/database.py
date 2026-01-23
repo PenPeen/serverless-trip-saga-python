@@ -15,15 +15,12 @@ class Database(Construct):
         super().__init__(scope, id)
 
         self.table = dynamodb.Table(
-            self, "TripTable",
-            partition_key = dynamodb.Attribute(
-                name="PK",
-                type=dynamodb.AttributeType.STRING
+            self,
+            "TripTable",
+            partition_key=dynamodb.Attribute(
+                name="PK", type=dynamodb.AttributeType.STRING
             ),
-            sort_key = dynamodb.Attribute(
-                name="SK",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode = dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy = RemovalPolicy.DESTROY
+            sort_key=dynamodb.Attribute(name="SK", type=dynamodb.AttributeType.STRING),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
         )

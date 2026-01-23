@@ -10,9 +10,9 @@ class Layers(Construct):
     def __init__(self, scope: Construct, id: str) -> None:
         super().__init__(scope, id)
 
-                # NOTE: self.common_layerに格納することで、
+        # NOTE: self.common_layerに格納することで、
 
-                # 他のConstructやStackから参照可能にしている
+        # 他のConstructやStackから参照可能にしている
         self.common_layer = _lambda.LayerVersion(
             self,
             "CommonLayer",
@@ -28,4 +28,5 @@ class Layers(Construct):
                 ),
             ),
             compatible_runtimes=[_lambda.Runtime.PYTHON_3_14],
-            description="Common dependencies Library")
+            description="Common dependencies Library",
+        )
