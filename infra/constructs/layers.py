@@ -1,5 +1,6 @@
 from aws_cdk import BundlingOptions
 from aws_cdk import aws_lambda as _lambda
+
 from constructs import Construct
 
 
@@ -9,7 +10,9 @@ class Layers(Construct):
     def __init__(self, scope: Construct, id: str) -> None:
         super().__init__(scope, id)
 
-        # NOTE: self.common_layerに格納することで、他のConstructやStackから参照可能にしている
+                # NOTE: self.common_layerに格納することで、
+
+                # 他のConstructやStackから参照可能にしている
         self.common_layer = _lambda.LayerVersion(
             self,
             "CommonLayer",
@@ -18,7 +21,9 @@ class Layers(Construct):
                 bundling=BundlingOptions(
                     image=_lambda.Runtime.PYTHON_3_14.bundling_image,
                     command=[
-                        "bash", "-c", "pip install -r requirements.txt -t /asset-output/python"
+                        "bash",
+                        "-c",
+                        "pip install -r requirements.txt -t /asset-output/python",
                     ],
                 ),
             ),
