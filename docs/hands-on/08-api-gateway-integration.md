@@ -266,6 +266,21 @@ class ServerlessTripSagaStack(Stack):
 
 ### 4.6 Step Functions Integration (POST /trips) の詳細
 * **AwsIntegration**: Step Functions の `StartExecution` アクションを API Gateway から直接呼び出します。
+* **VTL (Velocity Template Language) によるリクエスト変換**:
+    * クライアントからの JSON ボディは文字列としてエスケープする必要があります。
+    * 以下の `request_templates` 定義により、API Gateway はリクエストボディ全体(`$input.body`)をエスケープし、Step Functions の `input` パラメータとしてラップして渡します。
+    
+    ```python
+    # VTL Template Example
+    # {
+    #   "stateMachineArn": "arn:aws:states:...",
+    #   "input": "{\"trip_id\": \"123\", ...}"  <-- エスケープされたJSON文字列
+    # }
+    request_templates={
+        "application/json": f'{{"stateMachineArn": "{state_machine.state_machine_arn}", "input": "$util.escapeJavaScript($input.body)"}}'
+    },
+    ```
+
 * **IAM Role**: API Gateway が Step Functions を実行できる権限を付与します。
 * **非同期APIの挙動 (Asynchronous Pattern)**:
     * Step Functions への連携は**非同期**で行われます。

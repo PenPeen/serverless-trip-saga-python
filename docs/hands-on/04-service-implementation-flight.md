@@ -18,20 +18,174 @@ DDD (ドメイン駆動設計) のレイヤー構造を適用し、単体テス�
 
 ## 3. 実装ステップ
 
-### 3.1 Domain Layer: フライト予約モデル
-`services/flight/domain/booking.py` を作成し、予約データを表現するクラスとバリデーションを定義します (Pydantic利用)。
+### 3.1 Domain Layer: フライト予約モデル (DDD: Entity & ValueObject)
+`services/flight/domain/booking.py` を作成し、以下のコードを実装します。
+
+ここでは、単純なデータクラスではなく、**振る舞いを持つドメインモデル**を構築します。
+
+```python
+from enum import Enum
+from typing import Optional
+from decimal import Decimal
+from pydantic import BaseModel, Field
+
+# Value Object: 予約ステータス
+class BookingStatus(str, Enum):
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+
+# Value Object: 予約ID
+class BookingID(BaseModel):
+    value: str
+
+# Entity: フライト予約
+class Booking(BaseModel):
+    booking_id: BookingID
+    trip_id: str
+    flight_number: str
+    departure_time: str
+    arrival_time: str
+    price: Decimal
+    status: BookingStatus = BookingStatus.PENDING
+
+    # ドメインメソッド: 予約確定 (振る舞いの実装)
+    def confirm(self):
+        if self.status == BookingStatus.CANCELLED:
+            raise ValueError("Cannot confirm a cancelled booking")
+        self.status = BookingStatus.CONFIRMED
+
+    # ドメインメソッド: キャンセル
+    def cancel(self):
+        self.status = BookingStatus.CANCELLED
+```
 
 ### 3.2 Adapter Layer: DynamoDB Repository
 `services/flight/adapters/dynamodb_repository.py` を作成します。
-Hands-on 02 で作成したテーブルに対し、PK=`TRIP#<id>`, SK=`FLIGHT#<id>` の形式でデータを保存する処理を実装します。
+ドメインオブジェクト(`Booking`)をDynamoDBのアイテム形式に変換して保存します。
+
+```python
+import os
+import boto3
+from services.flight.domain.booking import Booking
+
+class DynamoDBRepository:
+    def __init__(self, table_name: str = None):
+        self.table_name = table_name or os.getenv("TABLE_NAME")
+        self.dynamodb = boto3.resource("dynamodb")
+        self.table = self.dynamodb.Table(self.table_name)
+
+    def save(self, booking: Booking) -> None:
+        item = {
+            "PK": f"TRIP#{booking.trip_id}",
+            "SK": f"FLIGHT#{booking.booking_id.value}",
+            "type": "FLIGHT",
+            "booking_id": booking.booking_id.value,
+            "flight_number": booking.flight_number,
+            "departure_time": booking.departure_time,
+            "arrival_time": booking.arrival_time,
+            "price": str(booking.price), # Decimal対応のため文字列化
+            "status": booking.status.value,
+        }
+        self.table.put_item(Item=item)
+```
 
 ### 3.3 Application Layer: 予約ユースケース
 `services/flight/applications/reserve_flight.py` を作成します。
-入力データを受け取り、ドメインオブジェクトを生成し、リポジトリを通じて保存する一連の流れを記述します。
+アプリケーションサービスは、ドメインオブジェクトの生成とリポジトリへの保存を調整（オーケストレーション）します。
+ここでは `TypedDict` を使用して入力データの構造を明確にします。
+
+```python
+from typing import TypedDict
+from decimal import Decimal
+from services.flight.domain.booking import Booking, BookingID
+from services.flight.adapters.dynamodb_repository import DynamoDBRepository
+
+# 入力データの構造定義
+class FlightDetails(TypedDict):
+    flight_number: str
+    departure_time: str
+    arrival_time: str
+    price: Decimal
+
+class ReserveFlightService:
+    def __init__(self, repository: DynamoDBRepository):
+        self.repository = repository
+
+    def reserve(self, trip_id: str, flight_details: FlightDetails) -> dict:
+        # 1. IDの生成 (冪等性担保のため trip_id から決定論的に生成)
+        # 同じ trip_id でのリクエストは常に同じ booking_id になる
+        booking_id_value = f"flight_for_{trip_id}"
+
+        # 2. Entityの生成
+        booking = Booking(
+            booking_id=BookingID(value=booking_id_value),
+            trip_id=trip_id,
+            flight_number=flight_details["flight_number"],
+            departure_time=flight_details["departure_time"],
+            arrival_time=flight_details["arrival_time"],
+            price=flight_details["price"]
+        )
+
+        # 3. ドメインロジックの実行 (必要であれば)
+        # booking.validate_flight_schedule() など
+
+        # 4. 永続化
+        self.repository.save(booking)
+
+        # 5. 結果の返却 (DTOへの変換推奨だが今回は簡易化)
+        return booking.model_dump(mode="json")
+```
 
 ### 3.4 Handler Layer: Lambda Entrypoint
 `services/flight/handlers/reserve.py` を作成します。
-Powertools を使用してイベントをパースし、Application Layer を呼び出します。
+外部からの入力を受け取り、アプリケーションサービスを呼び出します。
+
+```python
+from decimal import Decimal
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from services.flight.applications.reserve_flight import ReserveFlightService
+from services.flight.adapters.dynamodb_repository import DynamoDBRepository
+
+logger = Logger()
+tracer = Tracer()
+
+# Global scope initialization (Cold Start execution)
+# Lambda のコールドスタート時に一度だけ実行され、接続が再利用されます
+repository = DynamoDBRepository()
+service = ReserveFlightService(repository)
+
+@logger.inject_lambda_context
+@tracer.capture_lambda_handler
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    logger.info("Received reserve flight request", extra={"event": event})
+
+    try:
+        # Step Functions からの入力 or API Gateway からの入力に対応
+        # ここでは単純化のため直接 event を参照
+        trip_id = event.get("trip_id")
+        
+        # 入力データを TypedDict の構造に合わせて準備 (Decimal変換など)
+        raw_flight_details = event.get("flight_details", {})
+        flight_details = {
+            "flight_number": raw_flight_details.get("flight_number"),
+            "departure_time": raw_flight_details.get("departure_time"),
+            "arrival_time": raw_flight_details.get("arrival_time"),
+            "price": Decimal(str(raw_flight_details.get("price", "0")))
+        }
+
+        # Global instance is used
+        result = service.reserve(trip_id, flight_details)
+        
+        return {
+            "status": "success",
+            "data": result
+        }
+    except Exception as e:
+        logger.exception("Failed to reserve flight")
+        raise
+```
 
 ## 4. 単体テストの実装 (Unit Testing)
 
