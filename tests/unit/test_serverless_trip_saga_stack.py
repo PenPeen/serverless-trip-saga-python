@@ -3,6 +3,7 @@ import aws_cdk.assertions as assertions
 
 from serverless_trip_saga_stack import ServerlessTripSagaStack
 
+
 def test_stack_created():
     app = core.App()
     stack = ServerlessTripSagaStack(app, "ServerlessTripSagaStack")
