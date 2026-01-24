@@ -7,27 +7,50 @@ DDD (ドメイン駆動設計) のレイヤー構造を適用し、Hands-on 03 �
 *   DDD レイヤー (Handler, Application, Domain, Adapter) に基づいた Lambda 実装を行う。
 *   **Repository パターン** を適用し、永続化を抽象化する。
 *   **Factory パターン** を適用し、エンティティ生成ロジックを分離する。
+*   **Value Object** を適切に設計し、ドメインの概念を型で表現する。
 *   `pytest` を用いた単体テストを作成し、ロジックの正当性を検証する。
 *   DynamoDB へのデータ書き込みを実装する。
 
 ## 2. ディレクトリ構造
-`services/flight/` 配下に以下の構造を作成します。
+
+### 2.1 共通 Value Object（shared/domain/）
+
+複数のサービスで共通して使用する Value Object を `shared/domain/` に配置します。
+
+```
+services/shared/domain/
+├── __init__.py
+├── entity.py              # Entity 基底クラス（Hands-on 03 で作成済み）
+├── repository.py          # Repository 基底クラス（Hands-on 03 で作成済み）
+├── exceptions.py          # 例外（Hands-on 03 で作成済み）
+├── trip_id.py             # TripId（全サービス共通）
+├── money.py               # Money（金額）
+├── currency.py            # Currency（通貨）
+└── date_time.py           # DateTime（日時）
+```
+
+### 2.2 Flight Service（flight/）
+
+Value Object と Entity はファイルを分けて配置し、肥大化に備えます。
 
 ```
 services/flight/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
-│   ├── request_models.py   # Pydantic リクエストモデル（バリデーション）
-│   └── reserve.py          # Lambda エントリーポイント
+│   ├── request_models.py      # Pydantic リクエストモデル（バリデーション）
+│   └── reserve.py             # Lambda エントリーポイント
 ├── applications/
 │   ├── __init__.py
-│   └── reserve_flight.py   # ユースケース
+│   └── reserve_flight.py      # ユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── booking.py          # Entity & ValueObject
-│   ├── booking_factory.py  # Factory (ID生成ロジック)
-│   └── booking_repository.py  # Repository インターフェース (ABC)
+│   ├── booking_id.py          # BookingId（Value Object）
+│   ├── booking_status.py      # BookingStatus（Enum）
+│   ├── flight_number.py       # FlightNumber（Value Object）
+│   ├── booking.py             # Booking（Entity）
+│   ├── booking_factory.py     # Factory
+│   └── booking_repository.py  # Repository インターフェース
 └── adapters/
     ├── __init__.py
     └── dynamodb_booking_repository.py  # Repository 具象実装
@@ -35,112 +58,401 @@ services/flight/
 
 ## 3. 実装ステップ
 
-### 3.1 Domain Layer: フライト予約モデル (Entity & ValueObject)
+### 3.1 共通 Value Object の実装
 
-`services/flight/domain/booking.py` を作成し、以下のコードを実装します。
+まず、複数サービスで共通して使用する Value Object を実装します。
 
-Hands-on 03 で作成した `Entity` 基底クラスを継承し、**振る舞いを持つドメインモデル**を構築します。
+#### TripId（`services/shared/domain/trip_id.py`）
+
+全サービスで使用される旅行IDです。
 
 ```python
 from dataclasses import dataclass
-from enum import Enum
+
+
+@dataclass(frozen=True)
+class TripId:
+    """旅行ID（全サービス共通）
+
+    Value Object として不変性を保証。
+    同じ値を持つ TripId は同一とみなされる。
+    """
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value:
+            raise ValueError("TripId cannot be empty")
+
+    def __str__(self) -> str:
+        return self.value
+```
+
+#### Currency（`services/shared/domain/currency.py`）
+
+ISO 4217 に準拠した通貨コードを表現します。
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class Currency:
+    """通貨コード（ISO 4217）
+
+    例: JPY, USD, EUR
+    """
+    code: str
+
+    def __post_init__(self) -> None:
+        if len(self.code) != 3 or not self.code.isalpha():
+            raise ValueError(f"Invalid currency code: {self.code}")
+        # frozen=True でも __post_init__ 内では object.__setattr__ が必要
+        object.__setattr__(self, "code", self.code.upper())
+
+    def __str__(self) -> str:
+        return self.code
+
+    @classmethod
+    def jpy(cls) -> "Currency":
+        """日本円"""
+        return cls("JPY")
+
+    @classmethod
+    def usd(cls) -> "Currency":
+        """米ドル"""
+        return cls("USD")
+```
+
+#### Money（`services/shared/domain/money.py`）
+
+金額と通貨を組み合わせた Value Object です。
+
+```python
+from dataclasses import dataclass
 from decimal import Decimal
 
-from services.shared.domain import Entity
-from services.shared.domain.exceptions import BusinessRuleViolationException
+from services.shared.domain.currency import Currency
 
 
-# Value Object: 予約ステータス
-class BookingStatus(str, Enum):
-    PENDING = "PENDING"
-    CONFIRMED = "CONFIRMED"
-    CANCELLED = "CANCELLED"
+@dataclass(frozen=True)
+class Money:
+    """金額（通貨情報を含む）
+
+    Value Object として不変性を保証。
+    金額の演算メソッドを提供。
+    """
+    amount: Decimal
+    currency: Currency
+
+    def __post_init__(self) -> None:
+        if self.amount < 0:
+            raise ValueError("Amount cannot be negative")
+
+    def __str__(self) -> str:
+        return f"{self.amount} {self.currency}"
+
+    def add(self, other: "Money") -> "Money":
+        """金額を加算する"""
+        if self.currency != other.currency:
+            raise ValueError("Cannot add money with different currencies")
+        return Money(amount=self.amount + other.amount, currency=self.currency)
+
+    @classmethod
+    def jpy(cls, amount: Decimal | int | str) -> "Money":
+        """日本円で Money を生成"""
+        return cls(amount=Decimal(str(amount)), currency=Currency.jpy())
+```
+
+#### DateTime（`services/shared/domain/date_time.py`）
+
+ISO 8601 形式の日時を表現する Value Object です。
+
+```python
+from dataclasses import dataclass
+from datetime import datetime
 
 
-# Value Object: 予約ID（不変）
+@dataclass(frozen=True)
+class DateTime:
+    """日時（ISO 8601 形式）
+
+    Value Object として不変性を保証。
+    日時の比較や変換メソッドを提供。
+    """
+    value: str
+
+    def __post_init__(self) -> None:
+        # ISO 8601 形式のバリデーション
+        try:
+            datetime.fromisoformat(self.value.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO 8601 datetime: {self.value}") from e
+
+    def __str__(self) -> str:
+        return self.value
+
+    def to_datetime(self) -> datetime:
+        """datetime オブジェクトに変換"""
+        return datetime.fromisoformat(self.value.replace("Z", "+00:00"))
+
+    def is_before(self, other: "DateTime") -> bool:
+        """他の日時より前かどうか"""
+        return self.to_datetime() < other.to_datetime()
+
+    def is_after(self, other: "DateTime") -> bool:
+        """他の日時より後かどうか"""
+        return self.to_datetime() > other.to_datetime()
+```
+
+#### shared/domain/__init__.py の更新
+
+```python
+from .entity import Entity
+from .repository import Repository
+from .exceptions import (
+    BusinessRuleViolationException,
+    DomainException,
+    ResourceNotFoundException,
+)
+from .trip_id import TripId
+from .currency import Currency
+from .money import Money
+from .date_time import DateTime
+
+__all__ = [
+    "Entity",
+    "Repository",
+    "BusinessRuleViolationException",
+    "DomainException",
+    "ResourceNotFoundException",
+    "TripId",
+    "Currency",
+    "Money",
+    "DateTime",
+]
+```
+
+### 3.2 Flight 固有の Value Object
+
+#### BookingId（`services/flight/domain/booking_id.py`）
+
+```python
+from dataclasses import dataclass
+
+from services.shared.domain import TripId
+
+
 @dataclass(frozen=True)
 class BookingId:
+    """フライト予約ID（Value Object）
+
+    不変で、値が同じなら同一とみなされる。
+    """
     value: str
 
     def __str__(self) -> str:
         return self.value
 
+    @classmethod
+    def from_trip_id(cls, trip_id: TripId) -> "BookingId":
+        """TripId から冪等な BookingId を生成
 
-# Entity: フライト予約
+        同じ TripId からは常に同じ BookingId が生成される。
+        これにより、リトライ時の冪等性が担保される。
+        """
+        return cls(value=f"flight_for_{trip_id}")
+```
+
+#### BookingStatus（`services/flight/domain/booking_status.py`）
+
+```python
+from enum import Enum
+
+
+class BookingStatus(str, Enum):
+    """予約ステータス"""
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+```
+
+#### FlightNumber（`services/flight/domain/flight_number.py`）
+
+```python
+import re
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class FlightNumber:
+    """フライト番号（Value Object）
+
+    航空会社コード（2文字）+ 便名番号（1-4桁）の形式。
+    例: NH001, JL123, AA1234
+    """
+    value: str
+
+    # フライト番号の形式: 2文字の航空会社コード + 1-4桁の数字
+    PATTERN = re.compile(r"^[A-Z]{2}\d{1,4}$")
+
+    def __post_init__(self) -> None:
+        normalized = self.value.upper()
+        if not self.PATTERN.match(normalized):
+            raise ValueError(
+                f"Invalid flight number format: {self.value}. "
+                "Expected format: AA123 (2 letters + 1-4 digits)"
+            )
+        object.__setattr__(self, "value", normalized)
+
+    def __str__(self) -> str:
+        return self.value
+
+    @property
+    def airline_code(self) -> str:
+        """航空会社コード（2文字）"""
+        return self.value[:2]
+
+    @property
+    def flight_num(self) -> str:
+        """便名番号"""
+        return self.value[2:]
+```
+
+### 3.3 Domain Layer: Booking Entity
+
+`services/flight/domain/booking.py`
+
+Entity は Value Object を使用してドメインの概念を表現します。
+
+```python
+from services.shared.domain import Entity, TripId, Money, DateTime
+from services.shared.domain.exceptions import BusinessRuleViolationException
+
+from services.flight.domain.booking_id import BookingId
+from services.flight.domain.booking_status import BookingStatus
+from services.flight.domain.flight_number import FlightNumber
+
+
 class Booking(Entity[BookingId]):
     """フライト予約エンティティ
 
-    Entity基底クラスを継承し、BookingIdで同一性を判定する。
-    - Entity は素のクラスで実装（dataclass は使わない）
-    - Value Object（BookingId等）は @dataclass(frozen=True) で実装
+    Entity 基底クラスを継承し、BookingId で同一性を判定する。
+    全てのフィールドは Value Object で表現される。
     """
 
     def __init__(
         self,
         id: BookingId,
-        trip_id: str,
-        flight_number: str,
-        departure_time: str,
-        arrival_time: str,
-        price: Decimal,
+        trip_id: TripId,
+        flight_number: FlightNumber,
+        departure_time: DateTime,
+        arrival_time: DateTime,
+        price: Money,
         status: BookingStatus = BookingStatus.PENDING,
     ) -> None:
-        super().__init__(id)  # Entity基底クラスの初期化
-        self.trip_id = trip_id
-        self.flight_number = flight_number
-        self.departure_time = departure_time
-        self.arrival_time = arrival_time
-        self.price = price
-        self.status = status
+        super().__init__(id)
+        self._trip_id = trip_id
+        self._flight_number = flight_number
+        self._departure_time = departure_time
+        self._arrival_time = arrival_time
+        self._price = price
+        self._status = status
 
-    # ドメインメソッド: 予約確定 (振る舞いの実装)
+        # ドメイン不変条件の検証
+        self._validate_schedule()
+
+    def _validate_schedule(self) -> None:
+        """出発時刻は到着時刻より前でなければならない"""
+        if not self._departure_time.is_before(self._arrival_time):
+            raise BusinessRuleViolationException(
+                "Departure time must be before arrival time"
+            )
+
+    @property
+    def trip_id(self) -> TripId:
+        return self._trip_id
+
+    @property
+    def flight_number(self) -> FlightNumber:
+        return self._flight_number
+
+    @property
+    def departure_time(self) -> DateTime:
+        return self._departure_time
+
+    @property
+    def arrival_time(self) -> DateTime:
+        return self._arrival_time
+
+    @property
+    def price(self) -> Money:
+        return self._price
+
+    @property
+    def status(self) -> BookingStatus:
+        return self._status
+
     def confirm(self) -> None:
-        if self.status == BookingStatus.CANCELLED:
+        """予約を確定する"""
+        if self._status == BookingStatus.CANCELLED:
             raise BusinessRuleViolationException(
                 "Cannot confirm a cancelled booking"
             )
-        self.status = BookingStatus.CONFIRMED
+        self._status = BookingStatus.CONFIRMED
 
-    # ドメインメソッド: キャンセル
     def cancel(self) -> None:
-        if self.status == BookingStatus.CONFIRMED:
-            # 確定済みの予約もキャンセル可能（補償トランザクション用）
-            pass
-        self.status = BookingStatus.CANCELLED
+        """予約をキャンセルする（補償トランザクション用）"""
+        self._status = BookingStatus.CANCELLED
 
     def to_dict(self) -> dict:
         """永続化用の辞書表現を返す"""
         return {
             "booking_id": str(self.id),
-            "trip_id": self.trip_id,
-            "flight_number": self.flight_number,
-            "departure_time": self.departure_time,
-            "arrival_time": self.arrival_time,
-            "price": str(self.price),
-            "status": self.status.value,
+            "trip_id": str(self._trip_id),
+            "flight_number": str(self._flight_number),
+            "departure_time": str(self._departure_time),
+            "arrival_time": str(self._arrival_time),
+            "price_amount": str(self._price.amount),
+            "price_currency": str(self._price.currency),
+            "status": self._status.value,
         }
 ```
 
-### 3.2 Domain Layer: Repository インターフェース
+### 3.4 Domain Layer: flight/domain/__init__.py
 
-`services/flight/domain/booking_repository.py` を作成します。
+```python
+from .booking_id import BookingId
+from .booking_status import BookingStatus
+from .flight_number import FlightNumber
+from .booking import Booking
 
-Repository の抽象インターフェースを Domain 層に定義することで、**依存性逆転の原則（DIP）** を適用します。
-Application 層は具象実装（DynamoDB）ではなく、この抽象に依存します。
+__all__ = [
+    "BookingId",
+    "BookingStatus",
+    "FlightNumber",
+    "Booking",
+]
+```
+
+### 3.5 Domain Layer: Repository インターフェース
+
+`services/flight/domain/booking_repository.py`
 
 ```python
 from abc import abstractmethod
 from typing import Optional
 
-from services.shared.domain import Repository
-from services.flight.domain.booking import Booking, BookingId
+from services.shared.domain import Repository, TripId
+
+from services.flight.domain.booking_id import BookingId
+from services.flight.domain.booking import Booking
 
 
 class BookingRepository(Repository[Booking, BookingId]):
     """フライト予約リポジトリのインターフェース
 
-    Domain層で定義し、具象実装はAdapter層で行う。
-    これにより、Domainはインフラ（DynamoDB等）に依存しない。
+    Domain 層で定義し、具象実装は Adapter 層で行う。
+    これにより、Domain はインフラ（DynamoDB 等）に依存しない。
     """
 
     @abstractmethod
@@ -154,23 +466,27 @@ class BookingRepository(Repository[Booking, BookingId]):
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, trip_id: str) -> Optional[Booking]:
-        """Trip IDで検索する（1 Trip = 1 Flight の前提）"""
+    def find_by_trip_id(self, trip_id: TripId) -> Optional[Booking]:
+        """Trip ID で検索する（1 Trip = 1 Flight の前提）"""
         raise NotImplementedError
 ```
 
-### 3.3 Domain Layer: Factory パターン
+### 3.6 Domain Layer: Factory パターン
 
-`services/flight/domain/booking_factory.py` を作成します。
+`services/flight/domain/booking_factory.py`
 
 Factory はエンティティの生成ロジックをカプセル化します。
-特に **冪等性キーの生成**（同じ trip_id からは常に同じ booking_id を生成）はここで行います。
 
 ```python
 from decimal import Decimal
 from typing import TypedDict
 
-from services.flight.domain.booking import Booking, BookingId, BookingStatus
+from services.shared.domain import TripId, Money, Currency, DateTime
+
+from services.flight.domain.booking import Booking
+from services.flight.domain.booking_id import BookingId
+from services.flight.domain.booking_status import BookingStatus
+from services.flight.domain.flight_number import FlightNumber
 
 
 class FlightDetails(TypedDict):
@@ -178,48 +494,54 @@ class FlightDetails(TypedDict):
     flight_number: str
     departure_time: str
     arrival_time: str
-    price: Decimal
+    price_amount: Decimal
+    price_currency: str
 
 
 class BookingFactory:
     """フライト予約エンティティのファクトリ
 
-    - 冪等性を担保するID生成
+    - 冪等性を担保する ID 生成
+    - プリミティブ型から Value Object への変換
     - 初期状態の設定
-    - 生成時のバリデーション
     """
 
-    def create(self, trip_id: str, flight_details: FlightDetails) -> Booking:
+    def create(self, trip_id: TripId, flight_details: FlightDetails) -> Booking:
         """新規予約エンティティを生成する
 
         Args:
-            trip_id: 旅行ID
+            trip_id: 旅行ID（Value Object）
             flight_details: フライト詳細情報
 
         Returns:
             Booking: 生成された予約エンティティ（PENDING状態）
         """
-        # 冪等性担保: 同じ trip_id からは常に同じ booking_id を生成
-        # これにより、リトライ時も同じエンティティが生成される
-        booking_id = BookingId(value=f"flight_for_{trip_id}")
+        # 冪等性担保: 同じ TripId からは常に同じ BookingId を生成
+        booking_id = BookingId.from_trip_id(trip_id)
+
+        # プリミティブ型から Value Object に変換
+        flight_number = FlightNumber(flight_details["flight_number"])
+        departure_time = DateTime(flight_details["departure_time"])
+        arrival_time = DateTime(flight_details["arrival_time"])
+        price = Money(
+            amount=flight_details["price_amount"],
+            currency=Currency(flight_details["price_currency"]),
+        )
 
         return Booking(
             id=booking_id,
             trip_id=trip_id,
-            flight_number=flight_details["flight_number"],
-            departure_time=flight_details["departure_time"],
-            arrival_time=flight_details["arrival_time"],
-            price=flight_details["price"],
+            flight_number=flight_number,
+            departure_time=departure_time,
+            arrival_time=arrival_time,
+            price=price,
             status=BookingStatus.PENDING,
         )
 ```
 
-### 3.4 Adapter Layer: DynamoDB Repository 実装
+### 3.7 Adapter Layer: DynamoDB Repository 実装
 
-`services/flight/adapters/dynamodb_booking_repository.py` を作成します。
-
-Domain 層で定義した `BookingRepository` インターフェースを実装します。
-**ドメインオブジェクトと DynamoDB アイテムの変換**はここで行います。
+`services/flight/adapters/dynamodb_booking_repository.py`
 
 ```python
 import os
@@ -228,7 +550,12 @@ from decimal import Decimal
 
 import boto3
 
-from services.flight.domain.booking import Booking, BookingId, BookingStatus
+from services.shared.domain import TripId, Money, Currency, DateTime
+
+from services.flight.domain.booking import Booking
+from services.flight.domain.booking_id import BookingId
+from services.flight.domain.booking_status import BookingStatus
+from services.flight.domain.flight_number import FlightNumber
 from services.flight.domain.booking_repository import BookingRepository
 
 
@@ -252,10 +579,9 @@ class DynamoDBBookingRepository(BookingRepository):
 
     def find_by_id(self, booking_id: BookingId) -> Optional[Booking]:
         """予約IDで検索する（GSI が必要、今回は未実装）"""
-        # 実装は GSI 設計後に追加
         raise NotImplementedError("GSI required for this query")
 
-    def find_by_trip_id(self, trip_id: str) -> Optional[Booking]:
+    def find_by_trip_id(self, trip_id: TripId) -> Optional[Booking]:
         """Trip ID でフライト予約を検索する"""
         response = self.table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",
@@ -276,23 +602,25 @@ class DynamoDBBookingRepository(BookingRepository):
         """DynamoDB アイテムをドメインエンティティに変換する"""
         return Booking(
             id=BookingId(value=item["booking_id"]),
-            trip_id=item["trip_id"],
-            flight_number=item["flight_number"],
-            departure_time=item["departure_time"],
-            arrival_time=item["arrival_time"],
-            price=Decimal(item["price"]),
+            trip_id=TripId(value=item["trip_id"]),
+            flight_number=FlightNumber(value=item["flight_number"]),
+            departure_time=DateTime(value=item["departure_time"]),
+            arrival_time=DateTime(value=item["arrival_time"]),
+            price=Money(
+                amount=Decimal(item["price_amount"]),
+                currency=Currency(item["price_currency"]),
+            ),
             status=BookingStatus(item["status"]),
         )
 ```
 
-### 3.5 Application Layer: 予約ユースケース
+### 3.8 Application Layer: 予約ユースケース
 
-`services/flight/applications/reserve_flight.py` を作成します。
-
-アプリケーションサービスは、**Factory** でエンティティを生成し、**Repository** で永続化を行います。
-具象クラスではなく**抽象（インターフェース）に依存**させることで、テスト時にモックへの差し替えが容易になります。
+`services/flight/applications/reserve_flight.py`
 
 ```python
+from services.shared.domain import TripId
+
 from services.flight.domain.booking import Booking
 from services.flight.domain.booking_factory import BookingFactory, FlightDetails
 from services.flight.domain.booking_repository import BookingRepository
@@ -313,39 +641,35 @@ class ReserveFlightService:
         self._repository = repository
         self._factory = factory
 
-    def reserve(self, trip_id: str, flight_details: FlightDetails) -> dict:
+    def reserve(self, trip_id: TripId, flight_details: FlightDetails) -> dict:
         """フライトを予約する
 
         Args:
-            trip_id: 旅行ID
+            trip_id: 旅行ID（Value Object）
             flight_details: フライト詳細情報
 
         Returns:
             dict: 予約結果
         """
-        # 1. Factory でエンティティを生成（ID生成ロジックはFactoryに委譲）
+        # 1. Factory でエンティティを生成（ID生成・Value Object変換はFactoryに委譲）
         booking: Booking = self._factory.create(trip_id, flight_details)
 
-        # 2. ドメインロジックの実行（必要に応じて）
-        # 例: booking.validate_schedule()
-
-        # 3. Repository で永続化
+        # 2. Repository で永続化
         self._repository.save(booking)
 
-        # 4. 結果の返却
+        # 3. 結果の返却
         return booking.to_dict()
 ```
 
-### 3.6 Handler Layer: リクエストバリデーション
+### 3.9 Handler Layer: リクエストバリデーション
 
-`services/flight/handlers/request_models.py` を作成します。
+`services/flight/handlers/request_models.py`
 
-**Pydantic** を使用して入力スキーマを厳密に定義します。
-これにより、型変換・バリデーション・エラーメッセージ生成が自動化されます。
+**Pydantic** を使用して入力スキーマを定義します。
+Handler 層でプリミティブ型を受け取り、Application 層に渡す前に Value Object に変換します。
 
 ```python
 from decimal import Decimal
-from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -370,14 +694,20 @@ class FlightDetailsRequest(BaseModel):
         description="到着時刻（ISO 8601形式）",
         examples=["2024-01-01T12:00:00"],
     )
-    price: Decimal = Field(
+    price_amount: Decimal = Field(
         ...,
         gt=0,
         description="料金（0より大きい値）",
         examples=[50000],
     )
+    price_currency: str = Field(
+        default="JPY",
+        pattern="^[A-Z]{3}$",
+        description="通貨コード（ISO 4217）",
+        examples=["JPY", "USD"],
+    )
 
-    @field_validator("price", mode="before")
+    @field_validator("price_amount", mode="before")
     @classmethod
     def convert_price_to_decimal(cls, v):
         """文字列や数値を Decimal に変換"""
@@ -406,7 +736,8 @@ class ReserveFlightRequest(BaseModel):
                         "flight_number": "NH001",
                         "departure_time": "2024-01-01T10:00:00",
                         "arrival_time": "2024-01-01T12:00:00",
-                        "price": 50000,
+                        "price_amount": 50000,
+                        "price_currency": "JPY",
                     },
                 }
             ]
@@ -414,16 +745,16 @@ class ReserveFlightRequest(BaseModel):
     }
 ```
 
-### 3.7 Handler Layer: Lambda エントリーポイント
+### 3.10 Handler Layer: Lambda エントリーポイント
 
-`services/flight/handlers/reserve.py` を作成します。
-
-Handler は Pydantic でバリデーションを行い、エラー時は構造化されたレスポンスを返します。
+`services/flight/handlers/reserve.py`
 
 ```python
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
+
+from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.adapters.dynamodb_booking_repository import DynamoDBBookingRepository
@@ -470,15 +801,19 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     # 2. Application Service 呼び出し
     # =========================================================================
     try:
-        # Pydantic Model から FlightDetails 辞書に変換
+        # プリミティブ型から Value Object に変換
+        trip_id = TripId(value=request.trip_id)
+
+        # FlightDetails 辞書を構築
         flight_details = {
             "flight_number": request.flight_details.flight_number,
             "departure_time": request.flight_details.departure_time,
             "arrival_time": request.flight_details.arrival_time,
-            "price": request.flight_details.price,
+            "price_amount": request.flight_details.price_amount,
+            "price_currency": request.flight_details.price_currency,
         }
 
-        result = service.reserve(request.trip_id, flight_details)
+        result = service.reserve(trip_id, flight_details)
 
         return {
             "status": "success",
@@ -494,7 +829,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         }
 ```
 
-### 3.8 バリデーションエラーのレスポンス例
+### 3.11 バリデーションエラーのレスポンス例
 
 入力が不正な場合、以下のような構造化されたエラーレスポンスが返されます。
 
@@ -512,7 +847,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     },
     {
       "type": "greater_than",
-      "loc": ["flight_details", "price"],
+      "loc": ["flight_details", "price_amount"],
       "msg": "Input should be greater than 0",
       "input": -100
     }
@@ -527,143 +862,132 @@ Repository パターンを採用したことで、**DynamoDB への依存なし�
 
 ### 4.1 テストファイルの配置
 
+Value Object と Entity を分離したことで、テストも細かく分割できます。
+
 ```
-tests/unit/services/flight/
-├── __init__.py
-├── test_booking.py           # Entity のテスト
-├── test_booking_factory.py   # Factory のテスト
-├── test_request_models.py    # リクエストバリデーションのテスト
-└── test_reserve_flight.py    # Application Service のテスト
+tests/unit/services/
+├── shared/
+│   └── domain/
+│       ├── __init__.py
+│       ├── test_trip_id.py
+│       ├── test_money.py
+│       ├── test_currency.py
+│       └── test_date_time.py
+└── flight/
+    ├── __init__.py
+    ├── domain/
+    │   ├── __init__.py
+    │   ├── test_booking_id.py
+    │   ├── test_flight_number.py
+    │   └── test_booking.py
+    ├── test_booking_factory.py
+    ├── test_request_models.py
+    └── test_reserve_flight.py
 ```
 
-### 4.2 リクエストバリデーションのテスト (`test_request_models.py`)
-
-Pydantic モデルのバリデーションをテストします。
+### 4.2 Value Object のテスト（`test_flight_number.py`）
 
 ```python
 import pytest
-from decimal import Decimal
-from pydantic import ValidationError
 
-from services.flight.handlers.request_models import (
-    FlightDetailsRequest,
-    ReserveFlightRequest,
-)
+from services.flight.domain.flight_number import FlightNumber
 
 
-class TestFlightDetailsRequest:
-    """FlightDetailsRequest のバリデーションテスト"""
+class TestFlightNumber:
+    """FlightNumber Value Object のテスト"""
 
-    def test_valid_request(self):
-        """正常なリクエストはバリデーションを通過する"""
-        request = FlightDetailsRequest(
-            flight_number="NH001",
-            departure_time="2024-01-01T10:00:00",
-            arrival_time="2024-01-01T12:00:00",
-            price=50000,
-        )
-        assert request.flight_number == "NH001"
-        assert request.price == Decimal("50000")
+    def test_valid_flight_number(self):
+        """正常なフライト番号を生成できる"""
+        fn = FlightNumber("NH001")
+        assert fn.value == "NH001"
+        assert fn.airline_code == "NH"
+        assert fn.flight_num == "001"
 
-    def test_price_string_converted_to_decimal(self):
-        """文字列の price は Decimal に変換される"""
-        request = FlightDetailsRequest(
-            flight_number="NH001",
-            departure_time="2024-01-01T10:00:00",
-            arrival_time="2024-01-01T12:00:00",
-            price="50000.50",
-        )
-        assert request.price == Decimal("50000.50")
+    def test_lowercase_is_normalized(self):
+        """小文字は大文字に正規化される"""
+        fn = FlightNumber("nh001")
+        assert fn.value == "NH001"
 
-    def test_flight_number_too_short(self):
-        """flight_number が短すぎる場合はエラー"""
-        with pytest.raises(ValidationError) as exc_info:
-            FlightDetailsRequest(
-                flight_number="X",  # 2文字未満
-                departure_time="2024-01-01T10:00:00",
-                arrival_time="2024-01-01T12:00:00",
-                price=50000,
-            )
-        assert "string_too_short" in str(exc_info.value)
+    def test_invalid_format_raises_error(self):
+        """不正な形式はエラーになる"""
+        with pytest.raises(ValueError):
+            FlightNumber("INVALID")
 
-    def test_price_must_be_positive(self):
-        """price は0より大きい必要がある"""
-        with pytest.raises(ValidationError) as exc_info:
-            FlightDetailsRequest(
-                flight_number="NH001",
-                departure_time="2024-01-01T10:00:00",
-                arrival_time="2024-01-01T12:00:00",
-                price=-100,
-            )
-        assert "greater_than" in str(exc_info.value)
-
-    def test_missing_required_field(self):
-        """必須フィールドが欠けている場合はエラー"""
-        with pytest.raises(ValidationError) as exc_info:
-            FlightDetailsRequest(
-                flight_number="NH001",
-                # departure_time が欠けている
-                arrival_time="2024-01-01T12:00:00",
-                price=50000,
-            )
-        assert "departure_time" in str(exc_info.value)
+    def test_equality(self):
+        """同じ値なら等価"""
+        fn1 = FlightNumber("NH001")
+        fn2 = FlightNumber("NH001")
+        assert fn1 == fn2
 ```
 
-### 4.3 Entity のテスト (`test_booking.py`)
+### 4.3 Entity のテスト（`test_booking.py`）
 
 ```python
 import pytest
 from decimal import Decimal
 
-from services.flight.domain.booking import Booking, BookingId, BookingStatus
+from services.shared.domain import TripId, Money, Currency, DateTime
 from services.shared.domain.exceptions import BusinessRuleViolationException
+
+from services.flight.domain.booking import Booking
+from services.flight.domain.booking_id import BookingId
+from services.flight.domain.booking_status import BookingStatus
+from services.flight.domain.flight_number import FlightNumber
 
 
 class TestBooking:
     """Booking Entity のテスト"""
 
-    def test_confirm_pending_booking(self):
-        """PENDING状態の予約を確定できる"""
-        booking = Booking(
+    def _create_booking(
+        self, status: BookingStatus = BookingStatus.PENDING
+    ) -> Booking:
+        """テスト用の Booking を生成"""
+        return Booking(
             id=BookingId(value="test-id"),
-            trip_id="trip-123",
-            flight_number="NH001",
-            departure_time="2024-01-01T10:00:00",
-            arrival_time="2024-01-01T12:00:00",
-            price=Decimal("50000"),
-            status=BookingStatus.PENDING,
+            trip_id=TripId(value="trip-123"),
+            flight_number=FlightNumber(value="NH001"),
+            departure_time=DateTime(value="2024-01-01T10:00:00"),
+            arrival_time=DateTime(value="2024-01-01T12:00:00"),
+            price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
+            status=status,
         )
 
+    def test_confirm_pending_booking(self):
+        """PENDING 状態の予約を確定できる"""
+        booking = self._create_booking(status=BookingStatus.PENDING)
         booking.confirm()
-
         assert booking.status == BookingStatus.CONFIRMED
 
     def test_cannot_confirm_cancelled_booking(self):
-        """CANCELLED状態の予約は確定できない"""
-        booking = Booking(
-            id=BookingId(value="test-id"),
-            trip_id="trip-123",
-            flight_number="NH001",
-            departure_time="2024-01-01T10:00:00",
-            arrival_time="2024-01-01T12:00:00",
-            price=Decimal("50000"),
-            status=BookingStatus.CANCELLED,
-        )
-
+        """CANCELLED 状態の予約は確定できない"""
+        booking = self._create_booking(status=BookingStatus.CANCELLED)
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
+
+    def test_invalid_schedule_raises_error(self):
+        """出発時刻が到着時刻より後の場合はエラー"""
+        with pytest.raises(BusinessRuleViolationException):
+            Booking(
+                id=BookingId(value="test-id"),
+                trip_id=TripId(value="trip-123"),
+                flight_number=FlightNumber(value="NH001"),
+                departure_time=DateTime(value="2024-01-01T12:00:00"),  # 後
+                arrival_time=DateTime(value="2024-01-01T10:00:00"),    # 前
+                price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
+            )
 ```
 
-### 4.4 Application Service のテスト (`test_reserve_flight.py`)
-
-Repository を**モック**に差し替えることで、DynamoDB なしでテストできます。
+### 4.4 Application Service のテスト（`test_reserve_flight.py`）
 
 ```python
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from services.shared.domain import TripId
+
 from services.flight.applications.reserve_flight import ReserveFlightService
-from services.flight.domain.booking import Booking, BookingId, BookingStatus
+from services.flight.domain.booking import Booking
+from services.flight.domain.booking_status import BookingStatus
 from services.flight.domain.booking_factory import BookingFactory
 
 
@@ -671,8 +995,8 @@ class TestReserveFlightService:
     """ReserveFlightService のテスト"""
 
     def test_reserve_creates_and_saves_booking(self):
-        """予約が作成され、Repositoryに保存される"""
-        # Arrange: モックの準備
+        """予約が作成され、Repository に保存される"""
+        # Arrange
         mock_repository = MagicMock()
         factory = BookingFactory()
         service = ReserveFlightService(
@@ -680,29 +1004,32 @@ class TestReserveFlightService:
             factory=factory,
         )
 
+        trip_id = TripId(value="trip-123")
         flight_details = {
             "flight_number": "NH001",
             "departure_time": "2024-01-01T10:00:00",
             "arrival_time": "2024-01-01T12:00:00",
-            "price": Decimal("50000"),
+            "price_amount": Decimal("50000"),
+            "price_currency": "JPY",
         }
 
-        # Act: 予約実行
-        result = service.reserve("trip-123", flight_details)
+        # Act
+        result = service.reserve(trip_id, flight_details)
 
-        # Assert: Repository.save が呼ばれたことを確認
+        # Assert
         mock_repository.save.assert_called_once()
-
-        # 保存されたエンティティの検証
         saved_booking = mock_repository.save.call_args[0][0]
         assert isinstance(saved_booking, Booking)
-        assert saved_booking.trip_id == "trip-123"
+        assert saved_booking.trip_id == trip_id
         assert saved_booking.status == BookingStatus.PENDING
 ```
 
 ### 4.5 テストの実行
 
 ```bash
+# 共通 Value Object のテストを実行
+pytest tests/unit/services/shared/ -v
+
 # Flight Service のテストを実行
 pytest tests/unit/services/flight/ -v
 
