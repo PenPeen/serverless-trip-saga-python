@@ -167,7 +167,6 @@ Factory はエンティティの生成ロジックをカプセル化します。
 from decimal import Decimal
 from typing import TypedDict
 
-from services.shared.domain import Factory
 from services.flight.domain.booking import Booking, BookingId, BookingStatus
 
 
@@ -179,7 +178,7 @@ class FlightDetails(TypedDict):
     price: Decimal
 
 
-class BookingFactory(Factory[Booking]):
+class BookingFactory:
     """フライト予約エンティティのファクトリ
 
     - 冪等性を担保するID生成

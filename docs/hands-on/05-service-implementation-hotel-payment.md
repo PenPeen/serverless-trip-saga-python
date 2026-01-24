@@ -136,7 +136,6 @@ class HotelBooking(Entity[HotelBookingId]):
 from decimal import Decimal
 from typing import TypedDict
 
-from services.shared.domain import Factory
 from services.hotel.domain.hotel_booking import (
     HotelBooking,
     HotelBookingId,
@@ -151,7 +150,7 @@ class HotelDetails(TypedDict):
     price: Decimal
 
 
-class HotelBookingFactory(Factory[HotelBooking]):
+class HotelBookingFactory:
     """ホテル予約ファクトリ"""
 
     def create(self, trip_id: str, hotel_details: HotelDetails) -> HotelBooking:

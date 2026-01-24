@@ -250,34 +250,7 @@ class Repository(ABC, Generic[T, ID]):
         raise NotImplementedError
 ```
 
-### 5.4 Factory 基底クラス (`services/shared/domain/factory.py`)
-
-ファクトリは複雑なオブジェクトの生成ロジックをカプセル化します。
-ID生成、初期状態の設定、バリデーションなどを担当します。
-
-```python
-from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
-
-T = TypeVar("T")  # 生成対象の型
-
-
-class Factory(ABC, Generic[T]):
-    """Factory 抽象基底クラス
-
-    複雑なオブジェクト生成ロジックをカプセル化する。
-    - ID生成（冪等性キーの生成など）
-    - 初期状態の設定
-    - 生成時バリデーション
-    """
-
-    @abstractmethod
-    def create(self, *args, **kwargs) -> T:
-        """オブジェクトを生成する"""
-        raise NotImplementedError
-```
-
-### 5.5 ディレクトリ構成の更新
+### 5.4 ディレクトリ構成の更新
 
 ```
 services/shared/
@@ -287,14 +260,13 @@ services/shared/
 │   ├── exceptions.py    # 3.2 で作成済み
 │   ├── entity.py        # 5.1 で追加
 │   ├── aggregate.py     # 5.2 で追加
-│   ├── repository.py    # 5.3 で追加
-│   └── factory.py       # 5.4 で追加
+│   └── repository.py    # 5.3 で追加
 └── utils/
     ├── __init__.py
     └── logger.py        # 3.1 で作成済み
 ```
 
-### 5.6 `__init__.py` の更新 (`services/shared/domain/__init__.py`)
+### 5.5 `__init__.py` の更新 (`services/shared/domain/__init__.py`)
 
 ```python
 from .exceptions import (
@@ -305,7 +277,6 @@ from .exceptions import (
 from .entity import Entity
 from .aggregate import AggregateRoot
 from .repository import Repository
-from .factory import Factory
 
 __all__ = [
     "DomainException",
@@ -314,7 +285,6 @@ __all__ = [
     "Entity",
     "AggregateRoot",
     "Repository",
-    "Factory",
 ]
 ```
 
