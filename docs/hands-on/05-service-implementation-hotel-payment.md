@@ -49,6 +49,7 @@ services/hotel/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
+│   ├── request_models.py    # Pydantic リクエストモデル
 │   ├── reserve.py           # 予約 Lambda
 │   └── cancel.py            # キャンセル Lambda（補償トランザクション）
 ├── applications/
@@ -194,6 +195,112 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
         raise NotImplementedError
 ```
 
+### 4.5 Handler Layer: リクエストバリデーション
+
+`services/hotel/handlers/request_models.py` を作成します。
+
+```python
+from decimal import Decimal
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class HotelDetailsRequest(BaseModel):
+    """ホテル詳細のリクエストモデル"""
+
+    hotel_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="ホテル名",
+    )
+    check_in_date: str = Field(
+        ...,
+        description="チェックイン日（YYYY-MM-DD形式）",
+        examples=["2024-01-01"],
+    )
+    check_out_date: str = Field(
+        ...,
+        description="チェックアウト日（YYYY-MM-DD形式）",
+        examples=["2024-01-03"],
+    )
+    price: Decimal = Field(
+        ...,
+        gt=0,
+        description="料金（0より大きい値）",
+    )
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def convert_price_to_decimal(cls, v):
+        if isinstance(v, Decimal):
+            return v
+        return Decimal(str(v))
+
+
+class ReserveHotelRequest(BaseModel):
+    """ホテル予約リクエストモデル"""
+
+    trip_id: str = Field(..., min_length=1)
+    hotel_details: HotelDetailsRequest
+
+
+class CancelHotelRequest(BaseModel):
+    """ホテルキャンセルリクエストモデル（補償トランザクション用）"""
+
+    trip_id: str = Field(..., min_length=1)
+```
+
+### 4.6 Handler Layer: Lambda エントリーポイント
+
+`services/hotel/handlers/reserve.py`
+
+```python
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from pydantic import ValidationError
+
+from services.hotel.handlers.request_models import ReserveHotelRequest
+
+logger = Logger()
+tracer = Tracer()
+
+# ... 依存関係の組み立て（Flight Service と同様）
+
+
+@logger.inject_lambda_context
+@tracer.capture_lambda_handler
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    logger.info("Received reserve hotel request", extra={"event": event})
+
+    # 入力バリデーション
+    try:
+        request = ReserveHotelRequest.model_validate(event)
+    except ValidationError as e:
+        logger.warning("Validation failed", extra={"errors": e.errors()})
+        return {
+            "status": "error",
+            "error_code": "VALIDATION_ERROR",
+            "message": "入力データが不正です",
+            "details": e.errors(),
+        }
+
+    # Application Service 呼び出し
+    try:
+        hotel_details = {
+            "hotel_name": request.hotel_details.hotel_name,
+            "check_in_date": request.hotel_details.check_in_date,
+            "check_out_date": request.hotel_details.check_out_date,
+            "price": request.hotel_details.price,
+        }
+        result = service.reserve(request.trip_id, hotel_details)
+        return {"status": "success", "data": result}
+
+    except Exception as e:
+        logger.exception("Failed to reserve hotel")
+        return {"status": "error", "error_code": "INTERNAL_ERROR", "message": str(e)}
+```
+
 ## 5. Payment Service の実装
 
 決済サービスも同じパターンで実装します。
@@ -205,6 +312,7 @@ services/payment/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
+│   ├── request_models.py    # Pydantic リクエストモデル
 │   ├── process.py           # 決済処理 Lambda
 │   └── refund.py            # 払い戻し Lambda（補償トランザクション）
 ├── applications/
@@ -284,6 +392,93 @@ class Payment(Entity[PaymentId]):
             "currency": self.currency,
             "status": self.status.value,
         }
+```
+
+### 5.3 Handler Layer: リクエストバリデーション
+
+`services/payment/handlers/request_models.py` を作成します。
+
+```python
+from decimal import Decimal
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class ProcessPaymentRequest(BaseModel):
+    """決済処理リクエストモデル"""
+
+    trip_id: str = Field(..., min_length=1)
+    amount: Decimal = Field(
+        ...,
+        gt=0,
+        description="決済金額（0より大きい値）",
+    )
+    currency: str = Field(
+        default="JPY",
+        pattern="^[A-Z]{3}$",
+        description="通貨コード（ISO 4217）",
+    )
+
+    @field_validator("amount", mode="before")
+    @classmethod
+    def convert_amount_to_decimal(cls, v):
+        if isinstance(v, Decimal):
+            return v
+        return Decimal(str(v))
+
+
+class RefundPaymentRequest(BaseModel):
+    """払い戻しリクエストモデル（補償トランザクション用）"""
+
+    trip_id: str = Field(..., min_length=1)
+```
+
+### 5.4 Handler Layer: Lambda エントリーポイント
+
+`services/payment/handlers/process.py`
+
+```python
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from pydantic import ValidationError
+
+from services.payment.handlers.request_models import ProcessPaymentRequest
+
+logger = Logger()
+tracer = Tracer()
+
+# ... 依存関係の組み立て（Flight Service と同様）
+
+
+@logger.inject_lambda_context
+@tracer.capture_lambda_handler
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    logger.info("Received process payment request", extra={"event": event})
+
+    # 入力バリデーション
+    try:
+        request = ProcessPaymentRequest.model_validate(event)
+    except ValidationError as e:
+        logger.warning("Validation failed", extra={"errors": e.errors()})
+        return {
+            "status": "error",
+            "error_code": "VALIDATION_ERROR",
+            "message": "入力データが不正です",
+            "details": e.errors(),
+        }
+
+    # Application Service 呼び出し
+    try:
+        result = service.process(
+            trip_id=request.trip_id,
+            amount=request.amount,
+            currency=request.currency,
+        )
+        return {"status": "success", "data": result}
+
+    except Exception as e:
+        logger.exception("Failed to process payment")
+        return {"status": "error", "error_code": "INTERNAL_ERROR", "message": str(e)}
 ```
 
 ## 6. CDK Construct への定義追加
