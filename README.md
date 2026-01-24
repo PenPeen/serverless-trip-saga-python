@@ -86,7 +86,7 @@ serverless-trip-saga-python/
 │       └── handlers/        # Lambdaハンドラー
 │       ├── applications/    # [Application Layer] ユースケース進行役
 │       ├── domain/          # ビジネスロジック
-│       └── adapters/        # DynamoDB/API実装
+│       └── infrastructure/  # DynamoDB/API実装
 ├── tests/                   # ユニットテスト・E2Eテスト
 └── buildspec.yml            # CodeBuild定義書
 

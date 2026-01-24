@@ -222,7 +222,7 @@ class AggregateRoot(Entity[ID]):
 ### 5.3 Repository 抽象基底クラス (`services/shared/domain/repository.py`)
 
 リポジトリは集約の永続化を抽象化します。
-ドメイン層ではインターフェースのみを定義し、具象実装は Adapter 層で行います（依存性逆転の原則）。
+ドメイン層ではインターフェースのみを定義し、具象実装は Infrastructure 層で行います（依存性逆転の原則）。
 
 ```python
 from abc import ABC, abstractmethod
@@ -236,7 +236,7 @@ class Repository(ABC, Generic[T, ID]):
     """Repository 抽象基底クラス
 
     集約の永続化を抽象化する。
-    具象実装（DynamoDB, RDS等）は Adapter 層で行う。
+    具象実装（DynamoDB, RDS等）は Infrastructure 層で行う。
     """
 
     @abstractmethod

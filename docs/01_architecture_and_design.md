@@ -149,7 +149,7 @@ graph TD
 3.  **Models / Domain (`domain/` or `models/`)**:
     *   **純粋なPythonコード** で構成されるビジネスロジックの中心。
     *   **重要:** `boto3` などのAWS SDKや、外部ライブラリへの依存を極力排除します。これにより、単体テストの容易性とポータビリティを確保します。
-4.  **Infrastructures / Adapters (`adapters/` or `infrastructures/`)**:
+4.  **Infrastructure (`infrastructure/`)**:
     *   DynamoDB, SNS, SQSなどのAWSリソースへの具体的なアクセス実装（Repositoryの実装）。
     *   Domain層で定義されたインターフェース（Abstract Base Class）を実装します（依存性逆転の原則）。
 

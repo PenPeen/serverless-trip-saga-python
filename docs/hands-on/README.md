@@ -40,7 +40,7 @@ AWS Serverlessサービス (Lambda, Step Functions, DynamoDB) を活用し、Sag
 
 *   **`docs/hands-on/04-service-implementation-flight.md`**
     *   **内容 (Review反映)**:
-        *   **Flight Service** の実装 (DDD構成: `handlers`, `applications`, `domain`, `adapters`)。
+        *   **Flight Service** の実装 (DDD構成: `handlers`, `applications`, `domain`, `infrastructure`)。
         *   **[追加] Unit Testing**: ビジネスロジック (Domain/Application) の単体テストを作成し、デプロイ前に品質を担保するサイクルを回す。
         *   DynamoDB への書き込み実装。
     *   **成果物**: テスト済みの Flight Lambda 関数。
