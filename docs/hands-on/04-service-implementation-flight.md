@@ -18,6 +18,7 @@ services/flight/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
+│   ├── request_models.py   # Pydantic リクエストモデル（バリデーション）
 │   └── reserve.py          # Lambda エントリーポイント
 ├── applications/
 │   ├── __init__.py
@@ -333,22 +334,99 @@ class ReserveFlightService:
         return booking.to_dict()
 ```
 
-### 3.6 Handler Layer: Lambda エントリーポイント
+### 3.6 Handler Layer: リクエストバリデーション
 
-`services/flight/handlers/reserve.py` を作成します。
+`services/flight/handlers/request_models.py` を作成します。
 
-Handler は外部からの入力を受け取り、依存関係を組み立てて Application Service を呼び出します。
-**依存関係の組み立て（DI）** はここで行います。
+**Pydantic** を使用して入力スキーマを厳密に定義します。
+これにより、型変換・バリデーション・エラーメッセージ生成が自動化されます。
 
 ```python
 from decimal import Decimal
+from typing import Optional
 
+from pydantic import BaseModel, Field, field_validator
+
+
+class FlightDetailsRequest(BaseModel):
+    """フライト詳細のリクエストモデル"""
+
+    flight_number: str = Field(
+        ...,
+        min_length=2,
+        max_length=10,
+        description="フライト番号（例: NH001）",
+        examples=["NH001", "JL123"],
+    )
+    departure_time: str = Field(
+        ...,
+        description="出発時刻（ISO 8601形式）",
+        examples=["2024-01-01T10:00:00"],
+    )
+    arrival_time: str = Field(
+        ...,
+        description="到着時刻（ISO 8601形式）",
+        examples=["2024-01-01T12:00:00"],
+    )
+    price: Decimal = Field(
+        ...,
+        gt=0,
+        description="料金（0より大きい値）",
+        examples=[50000],
+    )
+
+    @field_validator("price", mode="before")
+    @classmethod
+    def convert_price_to_decimal(cls, v):
+        """文字列や数値を Decimal に変換"""
+        if isinstance(v, Decimal):
+            return v
+        return Decimal(str(v))
+
+
+class ReserveFlightRequest(BaseModel):
+    """フライト予約リクエストモデル"""
+
+    trip_id: str = Field(
+        ...,
+        min_length=1,
+        description="旅行ID",
+        examples=["trip-123"],
+    )
+    flight_details: FlightDetailsRequest
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "trip_id": "trip-123",
+                    "flight_details": {
+                        "flight_number": "NH001",
+                        "departure_time": "2024-01-01T10:00:00",
+                        "arrival_time": "2024-01-01T12:00:00",
+                        "price": 50000,
+                    },
+                }
+            ]
+        }
+    }
+```
+
+### 3.7 Handler Layer: Lambda エントリーポイント
+
+`services/flight/handlers/reserve.py` を作成します。
+
+Handler は Pydantic でバリデーションを行い、エラー時は構造化されたレスポンスを返します。
+
+```python
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from pydantic import ValidationError
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.adapters.dynamodb_booking_repository import DynamoDBBookingRepository
 from services.flight.domain.booking_factory import BookingFactory
+from services.flight.handlers.request_models import ReserveFlightRequest
 
 logger = Logger()
 tracer = Tracer()
@@ -368,24 +446,37 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """フライト予約 Lambda ハンドラ
 
     Step Functions または API Gateway からの入力を受け取り、
-    フライト予約処理を実行する。
+    Pydantic でバリデーション後、フライト予約処理を実行する。
     """
     logger.info("Received reserve flight request", extra={"event": event})
 
+    # =========================================================================
+    # 1. 入力バリデーション（Pydantic）
+    # =========================================================================
     try:
-        trip_id = event.get("trip_id")
-
-        # 入力データを FlightDetails 構造に変換
-        raw_flight_details = event.get("flight_details", {})
-        flight_details = {
-            "flight_number": raw_flight_details.get("flight_number"),
-            "departure_time": raw_flight_details.get("departure_time"),
-            "arrival_time": raw_flight_details.get("arrival_time"),
-            "price": Decimal(str(raw_flight_details.get("price", "0"))),
+        request = ReserveFlightRequest.model_validate(event)
+    except ValidationError as e:
+        logger.warning("Validation failed", extra={"errors": e.errors()})
+        return {
+            "status": "error",
+            "error_code": "VALIDATION_ERROR",
+            "message": "入力データが不正です",
+            "details": e.errors(),
         }
 
-        # Application Service を呼び出し
-        result = service.reserve(trip_id, flight_details)
+    # =========================================================================
+    # 2. Application Service 呼び出し
+    # =========================================================================
+    try:
+        # Pydantic Model から FlightDetails 辞書に変換
+        flight_details = {
+            "flight_number": request.flight_details.flight_number,
+            "departure_time": request.flight_details.departure_time,
+            "arrival_time": request.flight_details.arrival_time,
+            "price": request.flight_details.price,
+        }
+
+        result = service.reserve(request.trip_id, flight_details)
 
         return {
             "status": "success",
@@ -394,7 +485,37 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 
     except Exception as e:
         logger.exception("Failed to reserve flight")
-        raise
+        return {
+            "status": "error",
+            "error_code": "INTERNAL_ERROR",
+            "message": str(e),
+        }
+```
+
+### 3.8 バリデーションエラーのレスポンス例
+
+入力が不正な場合、以下のような構造化されたエラーレスポンスが返されます。
+
+```json
+{
+  "status": "error",
+  "error_code": "VALIDATION_ERROR",
+  "message": "入力データが不正です",
+  "details": [
+    {
+      "type": "string_too_short",
+      "loc": ["flight_details", "flight_number"],
+      "msg": "String should have at least 2 characters",
+      "input": "X"
+    },
+    {
+      "type": "greater_than",
+      "loc": ["flight_details", "price"],
+      "msg": "Input should be greater than 0",
+      "input": -100
+    }
+  ]
+}
 ```
 
 ## 4. 単体テストの実装 (Unit Testing)
@@ -409,10 +530,84 @@ tests/unit/services/flight/
 ├── __init__.py
 ├── test_booking.py           # Entity のテスト
 ├── test_booking_factory.py   # Factory のテスト
+├── test_request_models.py    # リクエストバリデーションのテスト
 └── test_reserve_flight.py    # Application Service のテスト
 ```
 
-### 4.2 Entity のテスト (`test_booking.py`)
+### 4.2 リクエストバリデーションのテスト (`test_request_models.py`)
+
+Pydantic モデルのバリデーションをテストします。
+
+```python
+import pytest
+from decimal import Decimal
+from pydantic import ValidationError
+
+from services.flight.handlers.request_models import (
+    FlightDetailsRequest,
+    ReserveFlightRequest,
+)
+
+
+class TestFlightDetailsRequest:
+    """FlightDetailsRequest のバリデーションテスト"""
+
+    def test_valid_request(self):
+        """正常なリクエストはバリデーションを通過する"""
+        request = FlightDetailsRequest(
+            flight_number="NH001",
+            departure_time="2024-01-01T10:00:00",
+            arrival_time="2024-01-01T12:00:00",
+            price=50000,
+        )
+        assert request.flight_number == "NH001"
+        assert request.price == Decimal("50000")
+
+    def test_price_string_converted_to_decimal(self):
+        """文字列の price は Decimal に変換される"""
+        request = FlightDetailsRequest(
+            flight_number="NH001",
+            departure_time="2024-01-01T10:00:00",
+            arrival_time="2024-01-01T12:00:00",
+            price="50000.50",
+        )
+        assert request.price == Decimal("50000.50")
+
+    def test_flight_number_too_short(self):
+        """flight_number が短すぎる場合はエラー"""
+        with pytest.raises(ValidationError) as exc_info:
+            FlightDetailsRequest(
+                flight_number="X",  # 2文字未満
+                departure_time="2024-01-01T10:00:00",
+                arrival_time="2024-01-01T12:00:00",
+                price=50000,
+            )
+        assert "string_too_short" in str(exc_info.value)
+
+    def test_price_must_be_positive(self):
+        """price は0より大きい必要がある"""
+        with pytest.raises(ValidationError) as exc_info:
+            FlightDetailsRequest(
+                flight_number="NH001",
+                departure_time="2024-01-01T10:00:00",
+                arrival_time="2024-01-01T12:00:00",
+                price=-100,
+            )
+        assert "greater_than" in str(exc_info.value)
+
+    def test_missing_required_field(self):
+        """必須フィールドが欠けている場合はエラー"""
+        with pytest.raises(ValidationError) as exc_info:
+            FlightDetailsRequest(
+                flight_number="NH001",
+                # departure_time が欠けている
+                arrival_time="2024-01-01T12:00:00",
+                price=50000,
+            )
+        assert "departure_time" in str(exc_info.value)
+```
+
+### 4.3 Entity のテスト (`test_booking.py`)
 
 ```python
 import pytest
@@ -457,7 +652,7 @@ class TestBooking:
             booking.confirm()
 ```
 
-### 4.3 Application Service のテスト (`test_reserve_flight.py`)
+### 4.4 Application Service のテスト (`test_reserve_flight.py`)
 
 Repository を**モック**に差し替えることで、DynamoDB なしでテストできます。
 
@@ -503,7 +698,7 @@ class TestReserveFlightService:
         assert saved_booking.status == BookingStatus.PENDING
 ```
 
-### 4.4 テストの実行
+### 4.5 テストの実行
 
 ```bash
 # Flight Service のテストを実行
