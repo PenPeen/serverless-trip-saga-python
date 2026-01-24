@@ -3,11 +3,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class TripId:
-    """旅行ID（全サービス共通）
-
-    Value Object として不変性を保証。
-    同じ値を持つ TripId は同一とみなされる。
-    """
+    """旅行ID"""
 
     value: str
 

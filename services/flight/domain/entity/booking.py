@@ -1,5 +1,6 @@
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
-from services.shared.domain import DateTime, Entity, Money, TripId
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
+from services.shared.domain import Entity, IsoDateTime, Money, TripId
 from services.shared.domain.exception import BusinessRuleViolationException
 
 
@@ -15,8 +16,8 @@ class Booking(Entity[BookingId]):
         id: BookingId,
         trip_id: TripId,
         flight_number: FlightNumber,
-        departure_time: DateTime,
-        arrival_time: DateTime,
+        departure_time: IsoDateTime,
+        arrival_time: IsoDateTime,
         price: Money,
         status: BookingStatus = BookingStatus.PENDING,
     ) -> None:
@@ -47,11 +48,11 @@ class Booking(Entity[BookingId]):
         return self._flight_number
 
     @property
-    def departure_time(self) -> DateTime:
+    def departure_time(self) -> IsoDateTime:
         return self._departure_time
 
     @property
-    def arrival_time(self) -> DateTime:
+    def arrival_time(self) -> IsoDateTime:
         return self._arrival_time
 
     @property

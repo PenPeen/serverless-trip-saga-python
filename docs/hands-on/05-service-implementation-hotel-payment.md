@@ -7,7 +7,7 @@
 
 *   Hands-on 04 で確立したパターンを横展開し、開発効率を体感する。
 *   **Repository + Factory パターン**を Hotel/Payment に適用する。
-*   **共通 Value Object**（TripId, Money, Currency, DateTime）を再利用する。
+*   **共通 Value Object**（TripId, Money, Currency, IsoDateTime）を再利用する。
 *   **冪等性 (Idempotency)** を実装し、二重処理を防止する。
 
 ## 2. 実装内容
@@ -62,12 +62,14 @@ services/hotel/
 ├── domain/
 │   ├── __init__.py
 │   ├── hotel_booking_id.py      # HotelBookingId（Value Object）
-│   ├── hotel_booking_status.py  # HotelBookingStatus（Enum）
 │   ├── hotel_name.py            # HotelName（Value Object）
 │   ├── stay_period.py           # StayPeriod（Value Object）
 │   ├── hotel_booking.py         # HotelBooking（Entity）
 │   ├── hotel_booking_factory.py # Factory
-│   └── hotel_booking_repository.py  # Repository インターフェース
+│   ├── hotel_booking_repository.py  # Repository インターフェース
+│   └── enum/
+│       ├── __init__.py
+│       └── hotel_booking_status.py  # HotelBookingStatus（Enum）
 └── infrastructure/
     ├── __init__.py
     └── dynamodb_hotel_booking_repository.py  # Repository 実装
@@ -103,7 +105,7 @@ class HotelBookingId:
         return cls(value=f"hotel_for_{trip_id}")
 ```
 
-#### HotelBookingStatus（`services/hotel/domain/hotel_booking_status.py`）
+#### HotelBookingStatus（`services/hotel/domain/enum/hotel_booking_status.py`）
 
 ```python
 from enum import Enum
@@ -185,7 +187,7 @@ from services.shared.domain import Entity, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
 from services.hotel.domain.hotel_booking_id import HotelBookingId
-from services.hotel.domain.hotel_booking_status import HotelBookingStatus
+from services.hotel.domain.enum import HotelBookingStatus
 from services.hotel.domain.hotel_name import HotelName
 from services.hotel.domain.stay_period import StayPeriod
 
@@ -253,7 +255,7 @@ class HotelBooking(Entity[HotelBookingId]):
 
 ```python
 from .hotel_booking_id import HotelBookingId
-from .hotel_booking_status import HotelBookingStatus
+from .enum import HotelBookingStatus
 from .hotel_name import HotelName
 from .stay_period import StayPeriod
 from .hotel_booking import HotelBooking
@@ -279,7 +281,7 @@ from services.shared.domain import TripId, Money, Currency
 
 from services.hotel.domain.hotel_booking import HotelBooking
 from services.hotel.domain.hotel_booking_id import HotelBookingId
-from services.hotel.domain.hotel_booking_status import HotelBookingStatus
+from services.hotel.domain.enum import HotelBookingStatus
 from services.hotel.domain.hotel_name import HotelName
 from services.hotel.domain.stay_period import StayPeriod
 
@@ -563,10 +565,12 @@ services/payment/
 ├── domain/
 │   ├── __init__.py
 │   ├── payment_id.py            # PaymentId（Value Object）
-│   ├── payment_status.py        # PaymentStatus（Enum）
 │   ├── payment.py               # Payment（Entity）
 │   ├── payment_factory.py       # Factory
-│   └── payment_repository.py    # Repository インターフェース
+│   ├── payment_repository.py    # Repository インターフェース
+│   └── enum/
+│       ├── __init__.py
+│       └── payment_status.py    # PaymentStatus（Enum）
 └── infrastructure/
     ├── __init__.py
     └── dynamodb_payment_repository.py  # Repository 実装
@@ -599,7 +603,7 @@ class PaymentId:
         return cls(value=f"payment_for_{trip_id}")
 ```
 
-#### PaymentStatus（`services/payment/domain/payment_status.py`）
+#### PaymentStatus（`services/payment/domain/enum/payment_status.py`）
 
 ```python
 from enum import Enum
@@ -622,7 +626,7 @@ from services.shared.domain import Entity, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
 from services.payment.domain.payment_id import PaymentId
-from services.payment.domain.payment_status import PaymentStatus
+from services.payment.domain.enum import PaymentStatus
 
 
 class Payment(Entity[PaymentId]):
@@ -679,7 +683,7 @@ class Payment(Entity[PaymentId]):
 
 ```python
 from .payment_id import PaymentId
-from .payment_status import PaymentStatus
+from .enum import PaymentStatus
 from .payment import Payment
 
 __all__ = [
@@ -700,7 +704,7 @@ from services.shared.domain import TripId, Money, Currency
 
 from services.payment.domain.payment import Payment
 from services.payment.domain.payment_id import PaymentId
-from services.payment.domain.payment_status import PaymentStatus
+from services.payment.domain.enum import PaymentStatus
 
 
 class PaymentFactory:

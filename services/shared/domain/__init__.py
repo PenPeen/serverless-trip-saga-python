@@ -5,7 +5,7 @@ from .exception import (
     ResourceNotFoundException,
 )
 from .repository import Repository
-from .value_object import Currency, DateTime, Money, TripId
+from .value_object import Currency, IsoDateTime, Money, TripId
 
 __all__ = [
     "Entity",
@@ -17,5 +17,5 @@ __all__ = [
     "TripId",
     "Currency",
     "Money",
-    "DateTime",
+    "IsoDateTime",
 ]
