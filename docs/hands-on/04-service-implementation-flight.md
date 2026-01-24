@@ -42,7 +42,7 @@ services/flight/
 Hands-on 03 で作成した `Entity` 基底クラスを継承し、**振る舞いを持つドメインモデル**を構築します。
 
 ```python
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from decimal import Decimal
 
@@ -67,28 +67,31 @@ class BookingId:
 
 
 # Entity: フライト予約
-@dataclass
 class Booking(Entity[BookingId]):
     """フライト予約エンティティ
 
     Entity基底クラスを継承し、BookingIdで同一性を判定する。
+    - Entity は素のクラスで実装（dataclass は使わない）
+    - Value Object（BookingId等）は @dataclass(frozen=True) で実装
     """
 
-    trip_id: str
-    flight_number: str
-    departure_time: str
-    arrival_time: str
-    price: Decimal
-    status: BookingStatus = field(default=BookingStatus.PENDING)
-
-    def __post_init__(self) -> None:
-        # Entity基底クラスの初期化（IDの設定）
-        # dataclass継承時は __post_init__ で親の初期化を行う
-        pass
-
-    @property
-    def id(self) -> BookingId:
-        return self._id
+    def __init__(
+        self,
+        id: BookingId,
+        trip_id: str,
+        flight_number: str,
+        departure_time: str,
+        arrival_time: str,
+        price: Decimal,
+        status: BookingStatus = BookingStatus.PENDING,
+    ) -> None:
+        super().__init__(id)  # Entity基底クラスの初期化
+        self.trip_id = trip_id
+        self.flight_number = flight_number
+        self.departure_time = departure_time
+        self.arrival_time = arrival_time
+        self.price = price
+        self.status = status
 
     # ドメインメソッド: 予約確定 (振る舞いの実装)
     def confirm(self) -> None:
@@ -108,7 +111,7 @@ class Booking(Entity[BookingId]):
     def to_dict(self) -> dict:
         """永続化用の辞書表現を返す"""
         return {
-            "booking_id": str(self._id),
+            "booking_id": str(self.id),
             "trip_id": self.trip_id,
             "flight_number": self.flight_number,
             "departure_time": self.departure_time,
@@ -201,7 +204,7 @@ class BookingFactory:
         booking_id = BookingId(value=f"flight_for_{trip_id}")
 
         return Booking(
-            _id=booking_id,
+            id=booking_id,
             trip_id=trip_id,
             flight_number=flight_details["flight_number"],
             departure_time=flight_details["departure_time"],
@@ -272,7 +275,7 @@ class DynamoDBBookingRepository(BookingRepository):
     def _to_entity(self, item: dict) -> Booking:
         """DynamoDB アイテムをドメインエンティティに変換する"""
         return Booking(
-            _id=BookingId(value=item["booking_id"]),
+            id=BookingId(value=item["booking_id"]),
             trip_id=item["trip_id"],
             flight_number=item["flight_number"],
             departure_time=item["departure_time"],
@@ -622,7 +625,7 @@ class TestBooking:
     def test_confirm_pending_booking(self):
         """PENDING状態の予約を確定できる"""
         booking = Booking(
-            _id=BookingId(value="test-id"),
+            id=BookingId(value="test-id"),
             trip_id="trip-123",
             flight_number="NH001",
             departure_time="2024-01-01T10:00:00",
@@ -638,7 +641,7 @@ class TestBooking:
     def test_cannot_confirm_cancelled_booking(self):
         """CANCELLED状態の予約は確定できない"""
         booking = Booking(
-            _id=BookingId(value="test-id"),
+            id=BookingId(value="test-id"),
             trip_id="trip-123",
             flight_number="NH001",
             departure_time="2024-01-01T10:00:00",
