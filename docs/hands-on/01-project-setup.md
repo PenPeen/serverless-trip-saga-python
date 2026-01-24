@@ -98,19 +98,19 @@ mkdir -p services
 mkdir -p services/flight/handlers
 mkdir -p services/flight/applications
 mkdir -p services/flight/domain
-mkdir -p services/flight/adapters
+mkdir -p services/flight/infrastructure
 
 # 2. Hotel Service (ホテル予約)
 mkdir -p services/hotel/handlers
 mkdir -p services/hotel/applications
 mkdir -p services/hotel/domain
-mkdir -p services/hotel/adapters
+mkdir -p services/hotel/infrastructure
 
 # 3. Payment Service (決済)
 mkdir -p services/payment/handlers
 mkdir -p services/payment/applications
 mkdir -p services/payment/domain
-mkdir -p services/payment/adapters
+mkdir -p services/payment/infrastructure
 
 # 4. Shared Kernel (共通処理)
 mkdir -p services/shared/domain
@@ -125,7 +125,7 @@ find services -type d -exec touch {}/__init__.py \;
 *   **`handlers/`**: Lambdaのエントリーポイント（リクエスト受け付け）。
 *   **`applications/`**: ユースケースの調整役（ドメインとインフラの橋渡し）。
 *   **`domain/`**: 純粋なビジネスロジック（外部依存なし）。
-*   **`adapters/`**: DynamoDBなど外部リソースへのアクセス実装。
+*   **`infrastructure/`**: DynamoDBなど外部リソースへのアクセス実装。
 *   **`shared/`**: サービス間で共有する例外定義や基底クラス。
 
 ## 6. 次のステップ

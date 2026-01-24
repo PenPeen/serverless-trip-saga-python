@@ -68,7 +68,7 @@ services/hotel/
 │   ├── hotel_booking.py         # HotelBooking（Entity）
 │   ├── hotel_booking_factory.py # Factory
 │   └── hotel_booking_repository.py  # Repository インターフェース
-└── adapters/
+└── infrastructure/
     ├── __init__.py
     └── dynamodb_hotel_booking_repository.py  # Repository 実装
 ```
@@ -247,7 +247,7 @@ class HotelBooking(Entity[HotelBookingId]):
 ```
 
 > **設計ポイント:** Entity に `to_dict()` を持たせない理由は Hands-on 04 を参照。
-> 永続化は Adapter 層、レスポンス変換は Handler 層の責務。
+> 永続化は Infrastructure 層、レスポンス変換は Handler 層の責務。
 
 ### 4.4 Domain Layer: hotel/domain/__init__.py
 
@@ -476,7 +476,7 @@ from pydantic import ValidationError
 from services.shared.domain import TripId
 
 from services.hotel.applications.reserve_hotel import ReserveHotelService
-from services.hotel.adapters.dynamodb_hotel_booking_repository import (
+from services.hotel.infrastructure.dynamodb_hotel_booking_repository import (
     DynamoDBHotelBookingRepository,
 )
 from services.hotel.domain.hotel_booking_factory import HotelBookingFactory
@@ -567,7 +567,7 @@ services/payment/
 │   ├── payment.py               # Payment（Entity）
 │   ├── payment_factory.py       # Factory
 │   └── payment_repository.py    # Repository インターフェース
-└── adapters/
+└── infrastructure/
     ├── __init__.py
     └── dynamodb_payment_repository.py  # Repository 実装
 ```
@@ -834,7 +834,7 @@ from pydantic import ValidationError
 from services.shared.domain import TripId
 
 from services.payment.applications.process_payment import ProcessPaymentService
-from services.payment.adapters.dynamodb_payment_repository import (
+from services.payment.infrastructure.dynamodb_payment_repository import (
     DynamoDBPaymentRepository,
 )
 from services.payment.domain.payment_factory import PaymentFactory

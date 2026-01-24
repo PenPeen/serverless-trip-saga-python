@@ -4,7 +4,7 @@
 DDD (ドメイン駆動設計) のレイヤー構造を適用し、Hands-on 03 で作成した DDD Building Blocks を活用します。
 
 ## 1. 目的
-*   DDD レイヤー (Handler, Application, Domain, Adapter) に基づいた Lambda 実装を行う。
+*   DDD レイヤー (Handler, Application, Domain, Infrastructure) に基づいた Lambda 実装を行う。
 *   **Repository パターン** を適用し、永続化を抽象化する。
 *   **Factory パターン** を適用し、エンティティ生成ロジックを分離する。
 *   **Value Object** を適切に設計し、ドメインの概念を型で表現する。
@@ -69,7 +69,7 @@ services/flight/
 │   └── factory/
 │       ├── __init__.py
 │       └── booking_factory.py # Factory
-└── adapters/
+└── infrastructure/
     ├── __init__.py
     └── dynamodb_booking_repository.py  # Repository 具象実装
 ```
@@ -455,7 +455,7 @@ from services.flight.domain.entity import Booking
 class BookingRepository(Repository[Booking, BookingId]):
     """フライト予約リポジトリのインターフェース
 
-    Domain 層で定義し、具象実装は Adapter 層で行う。
+    Domain 層で定義し、具象実装は Infrastructure 層で行う。
     これにより、Domain はインフラ（DynamoDB 等）に依存しない。
     """
 
@@ -541,9 +541,9 @@ class BookingFactory:
         )
 ```
 
-### 3.7 Adapter Layer: DynamoDB Repository 実装
+### 3.7 Infrastructure Layer: DynamoDB Repository 実装
 
-`services/flight/adapters/dynamodb_booking_repository.py`
+`services/flight/infrastructure/dynamodb_booking_repository.py`
 
 ```python
 import os
@@ -570,7 +570,7 @@ class DynamoDBBookingRepository(BookingRepository):
     def save(self, booking: Booking) -> None:
         """予約を DynamoDB に保存する
 
-        Adapter層の責務として、Entity から DynamoDB アイテムへの変換をここで行う。
+        Infrastructure層の責務として、Entity から DynamoDB アイテムへの変換をここで行う。
         Entity は永続化形式を知らないため、Repository が変換を担当する。
         """
         item = {
@@ -768,7 +768,7 @@ from pydantic import ValidationError
 from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
-from services.flight.adapters.dynamodb_booking_repository import DynamoDBBookingRepository
+from services.flight.infrastructure.dynamodb_booking_repository import DynamoDBBookingRepository
 from services.flight.domain.factory import BookingFactory
 from services.flight.handlers.request_models import ReserveFlightRequest
 
