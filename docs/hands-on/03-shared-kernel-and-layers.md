@@ -145,7 +145,180 @@ cdk deploy
 
 マネジメントコンソールの Lambda > Layers に `ServerlessTripSaga...CommonLayer` が作成されていることを確認します。
 
-## 5. 次のステップ
+## 5. DDD Building Blocks の実装
+
+DDDの戦術的パターンを適用するための基盤クラスを実装します。
+これにより、各サービスで一貫したドメインモデルの構築が可能になります。
+
+### 5.1 Entity 基底クラス (`services/shared/domain/entity.py`)
+
+エンティティは識別子（ID）によって同一性が決まるオブジェクトです。
+
+```python
+from abc import ABC
+from typing import Generic, TypeVar
+
+ID = TypeVar("ID")
+
+
+class Entity(ABC, Generic[ID]):
+    """Entity 基底クラス
+
+    エンティティは識別子によって同一性が決まる。
+    同じIDを持つエンティティは、属性が異なっていても同一とみなす。
+    """
+
+    def __init__(self, id: ID) -> None:
+        self._id = id
+
+    @property
+    def id(self) -> ID:
+        return self._id
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Entity):
+            return False
+        return self._id == other._id
+
+    def __hash__(self) -> int:
+        return hash(self._id)
+```
+
+### 5.2 AggregateRoot 基底クラス (`services/shared/domain/aggregate.py`)
+
+集約ルートは、関連するエンティティ群の一貫性境界を定義します。
+外部からのアクセスは必ず集約ルートを経由します。
+
+```python
+from typing import TypeVar
+from services.shared.domain.entity import Entity
+
+ID = TypeVar("ID")
+
+
+class AggregateRoot(Entity[ID]):
+    """AggregateRoot 基底クラス
+
+    集約ルートは一貫性境界（Consistency Boundary）を定義する。
+    - 配下のエンティティへのアクセスは必ず集約ルートを経由
+    - トランザクション境界 = 集約境界
+    """
+
+    def __init__(self, id: ID) -> None:
+        super().__init__(id)
+        self._domain_events: list = []
+
+    def add_domain_event(self, event: object) -> None:
+        """ドメインイベントを追加（Outbox Pattern で利用）"""
+        self._domain_events.append(event)
+
+    def clear_domain_events(self) -> list:
+        """ドメインイベントをクリアして返却"""
+        events = self._domain_events.copy()
+        self._domain_events.clear()
+        return events
+```
+
+### 5.3 Repository 抽象基底クラス (`services/shared/domain/repository.py`)
+
+リポジトリは集約の永続化を抽象化します。
+ドメイン層ではインターフェースのみを定義し、具象実装は Adapter 層で行います（依存性逆転の原則）。
+
+```python
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar, Optional
+
+T = TypeVar("T")  # AggregateRoot type
+ID = TypeVar("ID")  # ID type
+
+
+class Repository(ABC, Generic[T, ID]):
+    """Repository 抽象基底クラス
+
+    集約の永続化を抽象化する。
+    具象実装（DynamoDB, RDS等）は Adapter 層で行う。
+    """
+
+    @abstractmethod
+    def save(self, aggregate: T) -> None:
+        """集約を保存する"""
+        raise NotImplementedError
+
+    @abstractmethod
+    def find_by_id(self, id: ID) -> Optional[T]:
+        """IDで集約を検索する"""
+        raise NotImplementedError
+```
+
+### 5.4 Factory 基底クラス (`services/shared/domain/factory.py`)
+
+ファクトリは複雑なオブジェクトの生成ロジックをカプセル化します。
+ID生成、初期状態の設定、バリデーションなどを担当します。
+
+```python
+from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
+
+T = TypeVar("T")  # 生成対象の型
+
+
+class Factory(ABC, Generic[T]):
+    """Factory 抽象基底クラス
+
+    複雑なオブジェクト生成ロジックをカプセル化する。
+    - ID生成（冪等性キーの生成など）
+    - 初期状態の設定
+    - 生成時バリデーション
+    """
+
+    @abstractmethod
+    def create(self, *args, **kwargs) -> T:
+        """オブジェクトを生成する"""
+        raise NotImplementedError
+```
+
+### 5.5 ディレクトリ構成の更新
+
+```
+services/shared/
+├── __init__.py
+├── domain/
+│   ├── __init__.py
+│   ├── exceptions.py    # 3.2 で作成済み
+│   ├── entity.py        # 5.1 で追加
+│   ├── aggregate.py     # 5.2 で追加
+│   ├── repository.py    # 5.3 で追加
+│   └── factory.py       # 5.4 で追加
+└── utils/
+    ├── __init__.py
+    └── logger.py        # 3.1 で作成済み
+```
+
+### 5.6 `__init__.py` の更新 (`services/shared/domain/__init__.py`)
+
+```python
+from .exceptions import (
+    DomainException,
+    ResourceNotFoundException,
+    BusinessRuleViolationException,
+)
+from .entity import Entity
+from .aggregate import AggregateRoot
+from .repository import Repository
+from .factory import Factory
+
+__all__ = [
+    "DomainException",
+    "ResourceNotFoundException",
+    "BusinessRuleViolationException",
+    "Entity",
+    "AggregateRoot",
+    "Repository",
+    "Factory",
+]
+```
+
+## 6. 次のステップ
 
 共通基盤が整いました。いよいよ具体的な業務ロジックの実装に入ります。
 
