@@ -5,11 +5,7 @@ from services.shared.domain.exception import BusinessRuleViolationException
 
 
 class Booking(Entity[BookingId]):
-    """フライト予約エンティティ
-
-    Entity 基底クラスを継承し、BookingId で同一性を判定する。
-    全てのフィールドは Value Object で表現される。
-    """
+    """フライト予約"""
 
     def __init__(
         self,
@@ -22,6 +18,7 @@ class Booking(Entity[BookingId]):
         status: BookingStatus = BookingStatus.PENDING,
     ) -> None:
         super().__init__(id)
+
         self._trip_id = trip_id
         self._flight_number = flight_number
         self._departure_time = departure_time
@@ -29,11 +26,10 @@ class Booking(Entity[BookingId]):
         self._price = price
         self._status = status
 
-        # ドメイン不変条件の検証
         self._validate_schedule()
 
     def _validate_schedule(self) -> None:
-        """出発時刻は到着時刻より前でなければならない"""
+        """出発時刻 < 到着時刻"""
         if not self._departure_time.is_before(self._arrival_time):
             raise BusinessRuleViolationException(
                 "Departure time must be before arrival time"
@@ -67,21 +63,9 @@ class Booking(Entity[BookingId]):
         """予約を確定する"""
         if self._status == BookingStatus.CANCELLED:
             raise BusinessRuleViolationException("Cannot confirm a cancelled booking")
+
         self._status = BookingStatus.CONFIRMED
 
     def cancel(self) -> None:
-        """予約をキャンセルする（補償トランザクション用）"""
+        """予約をキャンセルする"""
         self._status = BookingStatus.CANCELLED
-
-    def to_dict(self) -> dict:
-        """永続化用の辞書表現を返す"""
-        return {
-            "booking_id": str(self.id),
-            "trip_id": str(self._trip_id),
-            "flight_number": str(self._flight_number),
-            "departure_time": str(self._departure_time),
-            "arrival_time": str(self._arrival_time),
-            "price_amount": str(self._price.amount),
-            "price_currency": str(self._price.currency),
-            "status": self._status.value,
-        }
