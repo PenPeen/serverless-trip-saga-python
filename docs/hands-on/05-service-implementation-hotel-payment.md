@@ -69,10 +69,9 @@ services/hotel/
 ### 4.2 Domain Layer: Entity (`services/hotel/domain/hotel_booking.py`)
 
 ```python
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from decimal import Decimal
-from datetime import date
 
 from services.shared.domain import Entity
 from services.shared.domain.exceptions import BusinessRuleViolationException
@@ -84,6 +83,7 @@ class HotelBookingStatus(str, Enum):
     CANCELLED = "CANCELLED"
 
 
+# Value Object: ホテル予約ID（不変）
 @dataclass(frozen=True)
 class HotelBookingId:
     value: str
@@ -92,20 +92,31 @@ class HotelBookingId:
         return self.value
 
 
-@dataclass
+# Entity: ホテル予約
 class HotelBooking(Entity[HotelBookingId]):
-    """ホテル予約エンティティ"""
+    """ホテル予約エンティティ
 
-    trip_id: str
-    hotel_name: str
-    check_in_date: str
-    check_out_date: str
-    price: Decimal
-    status: HotelBookingStatus = field(default=HotelBookingStatus.PENDING)
+    - Entity は素のクラスで実装（dataclass は使わない）
+    - Value Object（HotelBookingId等）は @dataclass(frozen=True) で実装
+    """
 
-    @property
-    def id(self) -> HotelBookingId:
-        return self._id
+    def __init__(
+        self,
+        id: HotelBookingId,
+        trip_id: str,
+        hotel_name: str,
+        check_in_date: str,
+        check_out_date: str,
+        price: Decimal,
+        status: HotelBookingStatus = HotelBookingStatus.PENDING,
+    ) -> None:
+        super().__init__(id)  # Entity基底クラスの初期化
+        self.trip_id = trip_id
+        self.hotel_name = hotel_name
+        self.check_in_date = check_in_date
+        self.check_out_date = check_out_date
+        self.price = price
+        self.status = status
 
     def confirm(self) -> None:
         if self.status == HotelBookingStatus.CANCELLED:
@@ -120,7 +131,7 @@ class HotelBooking(Entity[HotelBookingId]):
 
     def to_dict(self) -> dict:
         return {
-            "booking_id": str(self._id),
+            "booking_id": str(self.id),
             "trip_id": self.trip_id,
             "hotel_name": self.hotel_name,
             "check_in_date": self.check_in_date,
@@ -136,7 +147,6 @@ class HotelBooking(Entity[HotelBookingId]):
 from decimal import Decimal
 from typing import TypedDict
 
-from services.shared.domain import Factory
 from services.hotel.domain.hotel_booking import (
     HotelBooking,
     HotelBookingId,
@@ -151,7 +161,7 @@ class HotelDetails(TypedDict):
     price: Decimal
 
 
-class HotelBookingFactory(Factory[HotelBooking]):
+class HotelBookingFactory:
     """ホテル予約ファクトリ"""
 
     def create(self, trip_id: str, hotel_details: HotelDetails) -> HotelBooking:
@@ -159,7 +169,7 @@ class HotelBookingFactory(Factory[HotelBooking]):
         booking_id = HotelBookingId(value=f"hotel_for_{trip_id}")
 
         return HotelBooking(
-            _id=booking_id,
+            id=booking_id,
             trip_id=trip_id,
             hotel_name=hotel_details["hotel_name"],
             check_in_date=hotel_details["check_in_date"],
@@ -332,7 +342,7 @@ services/payment/
 ### 5.2 Domain Layer: Entity (`services/payment/domain/payment.py`)
 
 ```python
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from decimal import Decimal
 
@@ -347,6 +357,7 @@ class PaymentStatus(str, Enum):
     FAILED = "FAILED"
 
 
+# Value Object: 決済ID（不変）
 @dataclass(frozen=True)
 class PaymentId:
     value: str
@@ -355,18 +366,27 @@ class PaymentId:
         return self.value
 
 
-@dataclass
+# Entity: 決済
 class Payment(Entity[PaymentId]):
-    """決済エンティティ"""
+    """決済エンティティ
 
-    trip_id: str
-    amount: Decimal
-    currency: str
-    status: PaymentStatus = field(default=PaymentStatus.PENDING)
+    - Entity は素のクラスで実装（dataclass は使わない）
+    - Value Object（PaymentId等）は @dataclass(frozen=True) で実装
+    """
 
-    @property
-    def id(self) -> PaymentId:
-        return self._id
+    def __init__(
+        self,
+        id: PaymentId,
+        trip_id: str,
+        amount: Decimal,
+        currency: str,
+        status: PaymentStatus = PaymentStatus.PENDING,
+    ) -> None:
+        super().__init__(id)  # Entity基底クラスの初期化
+        self.trip_id = trip_id
+        self.amount = amount
+        self.currency = currency
+        self.status = status
 
     def complete(self) -> None:
         """決済を完了する"""
@@ -386,7 +406,7 @@ class Payment(Entity[PaymentId]):
 
     def to_dict(self) -> dict:
         return {
-            "payment_id": str(self._id),
+            "payment_id": str(self.id),
             "trip_id": self.trip_id,
             "amount": str(self.amount),
             "currency": self.currency,
