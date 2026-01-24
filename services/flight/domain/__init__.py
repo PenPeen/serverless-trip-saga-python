@@ -1,7 +1,7 @@
 from .entity import Booking
-from .value_object import BookingId, BookingStatus, FlightNumber
-from .repository import BookingRepository
 from .factory import BookingFactory, FlightDetails
+from .repository import BookingRepository
+from .value_object import BookingId, BookingStatus, FlightNumber
 
 __all__ = [
     "Booking",

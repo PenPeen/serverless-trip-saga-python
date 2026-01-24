@@ -1,7 +1,7 @@
 from .exceptions import (
+    BusinessRuleViolationException,
     DomainException,
     ResourceNotFoundException,
-    BusinessRuleViolationException,
 )
 
 __all__ = [

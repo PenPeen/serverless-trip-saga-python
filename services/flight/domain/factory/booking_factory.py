@@ -1,10 +1,9 @@
 from decimal import Decimal
 from typing import TypedDict
 
-from services.shared.domain import TripId, Money, Currency, DateTime
-
 from services.flight.domain.entity import Booking
 from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.shared.domain import Currency, DateTime, Money, TripId
 
 
 class FlightDetails(TypedDict):
