@@ -1,12 +1,13 @@
 # Hands-on 05: Service Implementation - Hotel & Payment
 
-本ハンズオンでは、Hands-on 04 で学んだ DDD パターン（Repository, Factory）を活用し、
+本ハンズオンでは、Hands-on 04 で学んだ DDD パターン（Repository, Factory, Value Object）を活用し、
 残りのマイクロサービス **Hotel Service** と **Payment Service** を実装します。
 
 ## 1. 目的
 
 *   Hands-on 04 で確立したパターンを横展開し、開発効率を体感する。
 *   **Repository + Factory パターン**を Hotel/Payment に適用する。
+*   **共通 Value Object**（TripId, Money, Currency, DateTime）を再利用する。
 *   **冪等性 (Idempotency)** を実装し、二重処理を防止する。
 
 ## 2. 実装内容
@@ -44,21 +45,27 @@ Hands-on 04 の Flight Service と同じパターンで実装します。
 
 ### 4.1 ディレクトリ構造
 
+Value Object と Entity はファイルを分けて配置します。
+
 ```
 services/hotel/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
-│   ├── request_models.py    # Pydantic リクエストモデル
-│   ├── reserve.py           # 予約 Lambda
-│   └── cancel.py            # キャンセル Lambda（補償トランザクション）
+│   ├── request_models.py        # Pydantic リクエストモデル
+│   ├── reserve.py               # 予約 Lambda
+│   └── cancel.py                # キャンセル Lambda（補償トランザクション）
 ├── applications/
 │   ├── __init__.py
-│   ├── reserve_hotel.py     # 予約ユースケース
-│   └── cancel_hotel.py      # キャンセルユースケース
+│   ├── reserve_hotel.py         # 予約ユースケース
+│   └── cancel_hotel.py          # キャンセルユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── hotel_booking.py         # Entity & ValueObject
+│   ├── hotel_booking_id.py      # HotelBookingId（Value Object）
+│   ├── hotel_booking_status.py  # HotelBookingStatus（Enum）
+│   ├── hotel_name.py            # HotelName（Value Object）
+│   ├── stay_period.py           # StayPeriod（Value Object）
+│   ├── hotel_booking.py         # HotelBooking（Entity）
 │   ├── hotel_booking_factory.py # Factory
 │   └── hotel_booking_repository.py  # Repository インターフェース
 └── adapters/
@@ -66,127 +73,282 @@ services/hotel/
     └── dynamodb_hotel_booking_repository.py  # Repository 実装
 ```
 
-### 4.2 Domain Layer: Entity (`services/hotel/domain/hotel_booking.py`)
+### 4.2 Hotel 固有の Value Object
+
+#### HotelBookingId（`services/hotel/domain/hotel_booking_id.py`）
 
 ```python
 from dataclasses import dataclass
-from enum import Enum
-from decimal import Decimal
 
-from services.shared.domain import Entity
-from services.shared.domain.exceptions import BusinessRuleViolationException
+from services.shared.domain import TripId
 
 
-class HotelBookingStatus(str, Enum):
-    PENDING = "PENDING"
-    CONFIRMED = "CONFIRMED"
-    CANCELLED = "CANCELLED"
-
-
-# Value Object: ホテル予約ID（不変）
 @dataclass(frozen=True)
 class HotelBookingId:
+    """ホテル予約ID（Value Object）
+
+    不変で、値が同じなら同一とみなされる。
+    """
     value: str
 
     def __str__(self) -> str:
         return self.value
 
+    @classmethod
+    def from_trip_id(cls, trip_id: TripId) -> "HotelBookingId":
+        """TripId から冪等な HotelBookingId を生成
 
-# Entity: ホテル予約
+        同じ TripId からは常に同じ HotelBookingId が生成される。
+        """
+        return cls(value=f"hotel_for_{trip_id}")
+```
+
+#### HotelBookingStatus（`services/hotel/domain/hotel_booking_status.py`）
+
+```python
+from enum import Enum
+
+
+class HotelBookingStatus(str, Enum):
+    """ホテル予約ステータス"""
+    PENDING = "PENDING"
+    CONFIRMED = "CONFIRMED"
+    CANCELLED = "CANCELLED"
+```
+
+#### HotelName（`services/hotel/domain/hotel_name.py`）
+
+```python
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class HotelName:
+    """ホテル名（Value Object）
+
+    ホテル名のバリデーションを行う。
+    """
+    value: str
+
+    def __post_init__(self) -> None:
+        if not self.value or len(self.value.strip()) == 0:
+            raise ValueError("Hotel name cannot be empty")
+        if len(self.value) > 100:
+            raise ValueError("Hotel name is too long (max 100 characters)")
+
+    def __str__(self) -> str:
+        return self.value
+```
+
+#### StayPeriod（`services/hotel/domain/stay_period.py`）
+
+```python
+from dataclasses import dataclass
+from datetime import date
+
+
+@dataclass(frozen=True)
+class StayPeriod:
+    """滞在期間（Value Object）
+
+    チェックイン日とチェックアウト日をまとめた Value Object。
+    日付の妥当性を検証する。
+    """
+    check_in: str   # YYYY-MM-DD 形式
+    check_out: str  # YYYY-MM-DD 形式
+
+    def __post_init__(self) -> None:
+        # 日付形式のバリデーション
+        try:
+            check_in_date = date.fromisoformat(self.check_in)
+            check_out_date = date.fromisoformat(self.check_out)
+        except ValueError as e:
+            raise ValueError(f"Invalid date format: {e}") from e
+
+        # チェックアウトはチェックインより後でなければならない
+        if check_out_date <= check_in_date:
+            raise ValueError("Check-out date must be after check-in date")
+
+    def nights(self) -> int:
+        """宿泊数を計算する"""
+        check_in_date = date.fromisoformat(self.check_in)
+        check_out_date = date.fromisoformat(self.check_out)
+        return (check_out_date - check_in_date).days
+```
+
+### 4.3 Domain Layer: HotelBooking Entity
+
+`services/hotel/domain/hotel_booking.py`
+
+```python
+from services.shared.domain import Entity, TripId, Money
+from services.shared.domain.exceptions import BusinessRuleViolationException
+
+from services.hotel.domain.hotel_booking_id import HotelBookingId
+from services.hotel.domain.hotel_booking_status import HotelBookingStatus
+from services.hotel.domain.hotel_name import HotelName
+from services.hotel.domain.stay_period import StayPeriod
+
+
 class HotelBooking(Entity[HotelBookingId]):
     """ホテル予約エンティティ
 
-    - Entity は素のクラスで実装（dataclass は使わない）
-    - Value Object（HotelBookingId等）は @dataclass(frozen=True) で実装
+    Entity 基底クラスを継承し、HotelBookingId で同一性を判定する。
+    全てのフィールドは Value Object で表現される。
     """
 
     def __init__(
         self,
         id: HotelBookingId,
-        trip_id: str,
-        hotel_name: str,
-        check_in_date: str,
-        check_out_date: str,
-        price: Decimal,
+        trip_id: TripId,
+        hotel_name: HotelName,
+        stay_period: StayPeriod,
+        price: Money,
         status: HotelBookingStatus = HotelBookingStatus.PENDING,
     ) -> None:
-        super().__init__(id)  # Entity基底クラスの初期化
-        self.trip_id = trip_id
-        self.hotel_name = hotel_name
-        self.check_in_date = check_in_date
-        self.check_out_date = check_out_date
-        self.price = price
-        self.status = status
+        super().__init__(id)
+        self._trip_id = trip_id
+        self._hotel_name = hotel_name
+        self._stay_period = stay_period
+        self._price = price
+        self._status = status
+
+    @property
+    def trip_id(self) -> TripId:
+        return self._trip_id
+
+    @property
+    def hotel_name(self) -> HotelName:
+        return self._hotel_name
+
+    @property
+    def stay_period(self) -> StayPeriod:
+        return self._stay_period
+
+    @property
+    def price(self) -> Money:
+        return self._price
+
+    @property
+    def status(self) -> HotelBookingStatus:
+        return self._status
 
     def confirm(self) -> None:
-        if self.status == HotelBookingStatus.CANCELLED:
+        """予約を確定する"""
+        if self._status == HotelBookingStatus.CANCELLED:
             raise BusinessRuleViolationException(
                 "Cannot confirm a cancelled booking"
             )
-        self.status = HotelBookingStatus.CONFIRMED
+        self._status = HotelBookingStatus.CONFIRMED
 
     def cancel(self) -> None:
         """予約をキャンセルする（補償トランザクション用）"""
-        self.status = HotelBookingStatus.CANCELLED
+        self._status = HotelBookingStatus.CANCELLED
 
     def to_dict(self) -> dict:
+        """永続化用の辞書表現を返す"""
         return {
             "booking_id": str(self.id),
-            "trip_id": self.trip_id,
-            "hotel_name": self.hotel_name,
-            "check_in_date": self.check_in_date,
-            "check_out_date": self.check_out_date,
-            "price": str(self.price),
-            "status": self.status.value,
+            "trip_id": str(self._trip_id),
+            "hotel_name": str(self._hotel_name),
+            "check_in_date": self._stay_period.check_in,
+            "check_out_date": self._stay_period.check_out,
+            "nights": self._stay_period.nights(),
+            "price_amount": str(self._price.amount),
+            "price_currency": str(self._price.currency),
+            "status": self._status.value,
         }
 ```
 
-### 4.3 Domain Layer: Factory (`services/hotel/domain/hotel_booking_factory.py`)
+### 4.4 Domain Layer: hotel/domain/__init__.py
+
+```python
+from .hotel_booking_id import HotelBookingId
+from .hotel_booking_status import HotelBookingStatus
+from .hotel_name import HotelName
+from .stay_period import StayPeriod
+from .hotel_booking import HotelBooking
+
+__all__ = [
+    "HotelBookingId",
+    "HotelBookingStatus",
+    "HotelName",
+    "StayPeriod",
+    "HotelBooking",
+]
+```
+
+### 4.5 Domain Layer: Factory
+
+`services/hotel/domain/hotel_booking_factory.py`
 
 ```python
 from decimal import Decimal
 from typing import TypedDict
 
-from services.hotel.domain.hotel_booking import (
-    HotelBooking,
-    HotelBookingId,
-    HotelBookingStatus,
-)
+from services.shared.domain import TripId, Money, Currency
+
+from services.hotel.domain.hotel_booking import HotelBooking
+from services.hotel.domain.hotel_booking_id import HotelBookingId
+from services.hotel.domain.hotel_booking_status import HotelBookingStatus
+from services.hotel.domain.hotel_name import HotelName
+from services.hotel.domain.stay_period import StayPeriod
 
 
 class HotelDetails(TypedDict):
+    """ホテル詳細の入力データ構造"""
     hotel_name: str
     check_in_date: str
     check_out_date: str
-    price: Decimal
+    price_amount: Decimal
+    price_currency: str
 
 
 class HotelBookingFactory:
-    """ホテル予約ファクトリ"""
+    """ホテル予約ファクトリ
 
-    def create(self, trip_id: str, hotel_details: HotelDetails) -> HotelBooking:
-        # 冪等性担保: 同じ trip_id からは常に同じ booking_id を生成
-        booking_id = HotelBookingId(value=f"hotel_for_{trip_id}")
+    - 冪等性を担保する ID 生成
+    - プリミティブ型から Value Object への変換
+    """
+
+    def create(self, trip_id: TripId, hotel_details: HotelDetails) -> HotelBooking:
+        """新規予約エンティティを生成する"""
+        # 冪等性担保: 同じ TripId からは常に同じ HotelBookingId を生成
+        booking_id = HotelBookingId.from_trip_id(trip_id)
+
+        # プリミティブ型から Value Object に変換
+        hotel_name = HotelName(hotel_details["hotel_name"])
+        stay_period = StayPeriod(
+            check_in=hotel_details["check_in_date"],
+            check_out=hotel_details["check_out_date"],
+        )
+        price = Money(
+            amount=hotel_details["price_amount"],
+            currency=Currency(hotel_details["price_currency"]),
+        )
 
         return HotelBooking(
             id=booking_id,
             trip_id=trip_id,
-            hotel_name=hotel_details["hotel_name"],
-            check_in_date=hotel_details["check_in_date"],
-            check_out_date=hotel_details["check_out_date"],
-            price=hotel_details["price"],
+            hotel_name=hotel_name,
+            stay_period=stay_period,
+            price=price,
             status=HotelBookingStatus.PENDING,
         )
 ```
 
-### 4.4 Domain Layer: Repository インターフェース
+### 4.6 Domain Layer: Repository インターフェース
+
+`services/hotel/domain/hotel_booking_repository.py`
 
 ```python
 from abc import abstractmethod
 from typing import Optional
 
-from services.shared.domain import Repository
-from services.hotel.domain.hotel_booking import HotelBooking, HotelBookingId
+from services.shared.domain import Repository, TripId
+
+from services.hotel.domain.hotel_booking_id import HotelBookingId
+from services.hotel.domain.hotel_booking import HotelBooking
 
 
 class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
@@ -194,20 +356,23 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
 
     @abstractmethod
     def save(self, booking: HotelBooking) -> None:
+        """予約を保存する"""
         raise NotImplementedError
 
     @abstractmethod
     def find_by_id(self, booking_id: HotelBookingId) -> Optional[HotelBooking]:
+        """予約IDで検索する"""
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, trip_id: str) -> Optional[HotelBooking]:
+    def find_by_trip_id(self, trip_id: TripId) -> Optional[HotelBooking]:
+        """Trip ID で検索する"""
         raise NotImplementedError
 ```
 
-### 4.5 Handler Layer: リクエストバリデーション
+### 4.7 Handler Layer: リクエストバリデーション
 
-`services/hotel/handlers/request_models.py` を作成します。
+`services/hotel/handlers/request_models.py`
 
 ```python
 from decimal import Decimal
@@ -226,21 +391,28 @@ class HotelDetailsRequest(BaseModel):
     )
     check_in_date: str = Field(
         ...,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
         description="チェックイン日（YYYY-MM-DD形式）",
         examples=["2024-01-01"],
     )
     check_out_date: str = Field(
         ...,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
         description="チェックアウト日（YYYY-MM-DD形式）",
         examples=["2024-01-03"],
     )
-    price: Decimal = Field(
+    price_amount: Decimal = Field(
         ...,
         gt=0,
         description="料金（0より大きい値）",
     )
+    price_currency: str = Field(
+        default="JPY",
+        pattern="^[A-Z]{3}$",
+        description="通貨コード（ISO 4217）",
+    )
 
-    @field_validator("price", mode="before")
+    @field_validator("price_amount", mode="before")
     @classmethod
     def convert_price_to_decimal(cls, v):
         if isinstance(v, Decimal):
@@ -261,7 +433,7 @@ class CancelHotelRequest(BaseModel):
     trip_id: str = Field(..., min_length=1)
 ```
 
-### 4.6 Handler Layer: Lambda エントリーポイント
+### 4.8 Handler Layer: Lambda エントリーポイント
 
 `services/hotel/handlers/reserve.py`
 
@@ -270,17 +442,28 @@ from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
+from services.shared.domain import TripId
+
+from services.hotel.applications.reserve_hotel import ReserveHotelService
+from services.hotel.adapters.dynamodb_hotel_booking_repository import (
+    DynamoDBHotelBookingRepository,
+)
+from services.hotel.domain.hotel_booking_factory import HotelBookingFactory
 from services.hotel.handlers.request_models import ReserveHotelRequest
 
 logger = Logger()
 tracer = Tracer()
 
-# ... 依存関係の組み立て（Flight Service と同様）
+# 依存関係の組み立て（Composition Root）
+repository = DynamoDBHotelBookingRepository()
+factory = HotelBookingFactory()
+service = ReserveHotelService(repository=repository, factory=factory)
 
 
 @logger.inject_lambda_context
 @tracer.capture_lambda_handler
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    """ホテル予約 Lambda ハンドラ"""
     logger.info("Received reserve hotel request", extra={"event": event})
 
     # 入力バリデーション
@@ -297,13 +480,15 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 
     # Application Service 呼び出し
     try:
+        trip_id = TripId(value=request.trip_id)
         hotel_details = {
             "hotel_name": request.hotel_details.hotel_name,
             "check_in_date": request.hotel_details.check_in_date,
             "check_out_date": request.hotel_details.check_out_date,
-            "price": request.hotel_details.price,
+            "price_amount": request.hotel_details.price_amount,
+            "price_currency": request.hotel_details.price_currency,
         }
-        result = service.reserve(request.trip_id, hotel_details)
+        result = service.reserve(trip_id, hotel_details)
         return {"status": "success", "data": result}
 
     except Exception as e:
@@ -322,16 +507,18 @@ services/payment/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
-│   ├── request_models.py    # Pydantic リクエストモデル
-│   ├── process.py           # 決済処理 Lambda
-│   └── refund.py            # 払い戻し Lambda（補償トランザクション）
+│   ├── request_models.py        # Pydantic リクエストモデル
+│   ├── process.py               # 決済処理 Lambda
+│   └── refund.py                # 払い戻し Lambda（補償トランザクション）
 ├── applications/
 │   ├── __init__.py
-│   ├── process_payment.py   # 決済ユースケース
-│   └── refund_payment.py    # 払い戻しユースケース
+│   ├── process_payment.py       # 決済ユースケース
+│   └── refund_payment.py        # 払い戻しユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── payment.py               # Entity & ValueObject
+│   ├── payment_id.py            # PaymentId（Value Object）
+│   ├── payment_status.py        # PaymentStatus（Enum）
+│   ├── payment.py               # Payment（Entity）
 │   ├── payment_factory.py       # Factory
 │   └── payment_repository.py    # Repository インターフェース
 └── adapters/
@@ -339,84 +526,176 @@ services/payment/
     └── dynamodb_payment_repository.py  # Repository 実装
 ```
 
-### 5.2 Domain Layer: Entity (`services/payment/domain/payment.py`)
+### 5.2 Payment 固有の Value Object
+
+#### PaymentId（`services/payment/domain/payment_id.py`）
 
 ```python
 from dataclasses import dataclass
-from enum import Enum
-from decimal import Decimal
 
-from services.shared.domain import Entity
-from services.shared.domain.exceptions import BusinessRuleViolationException
+from services.shared.domain import TripId
 
 
-class PaymentStatus(str, Enum):
-    PENDING = "PENDING"
-    COMPLETED = "COMPLETED"
-    REFUNDED = "REFUNDED"
-    FAILED = "FAILED"
-
-
-# Value Object: 決済ID（不変）
 @dataclass(frozen=True)
 class PaymentId:
+    """決済ID（Value Object）
+
+    不変で、値が同じなら同一とみなされる。
+    """
     value: str
 
     def __str__(self) -> str:
         return self.value
 
+    @classmethod
+    def from_trip_id(cls, trip_id: TripId) -> "PaymentId":
+        """TripId から冪等な PaymentId を生成"""
+        return cls(value=f"payment_for_{trip_id}")
+```
 
-# Entity: 決済
+#### PaymentStatus（`services/payment/domain/payment_status.py`）
+
+```python
+from enum import Enum
+
+
+class PaymentStatus(str, Enum):
+    """決済ステータス"""
+    PENDING = "PENDING"
+    COMPLETED = "COMPLETED"
+    REFUNDED = "REFUNDED"
+    FAILED = "FAILED"
+```
+
+### 5.3 Domain Layer: Payment Entity
+
+`services/payment/domain/payment.py`
+
+```python
+from services.shared.domain import Entity, TripId, Money
+from services.shared.domain.exceptions import BusinessRuleViolationException
+
+from services.payment.domain.payment_id import PaymentId
+from services.payment.domain.payment_status import PaymentStatus
+
+
 class Payment(Entity[PaymentId]):
     """決済エンティティ
 
-    - Entity は素のクラスで実装（dataclass は使わない）
-    - Value Object（PaymentId等）は @dataclass(frozen=True) で実装
+    Entity 基底クラスを継承し、PaymentId で同一性を判定する。
+    全てのフィールドは Value Object で表現される。
     """
 
     def __init__(
         self,
         id: PaymentId,
-        trip_id: str,
-        amount: Decimal,
-        currency: str,
+        trip_id: TripId,
+        amount: Money,
         status: PaymentStatus = PaymentStatus.PENDING,
     ) -> None:
-        super().__init__(id)  # Entity基底クラスの初期化
-        self.trip_id = trip_id
-        self.amount = amount
-        self.currency = currency
-        self.status = status
+        super().__init__(id)
+        self._trip_id = trip_id
+        self._amount = amount
+        self._status = status
+
+    @property
+    def trip_id(self) -> TripId:
+        return self._trip_id
+
+    @property
+    def amount(self) -> Money:
+        return self._amount
+
+    @property
+    def status(self) -> PaymentStatus:
+        return self._status
 
     def complete(self) -> None:
         """決済を完了する"""
-        if self.status != PaymentStatus.PENDING:
+        if self._status != PaymentStatus.PENDING:
             raise BusinessRuleViolationException(
-                f"Cannot complete payment in {self.status} status"
+                f"Cannot complete payment in {self._status} status"
             )
-        self.status = PaymentStatus.COMPLETED
+        self._status = PaymentStatus.COMPLETED
 
     def refund(self) -> None:
         """払い戻しを行う（補償トランザクション用）"""
-        if self.status != PaymentStatus.COMPLETED:
+        if self._status != PaymentStatus.COMPLETED:
             raise BusinessRuleViolationException(
                 "Can only refund completed payments"
             )
-        self.status = PaymentStatus.REFUNDED
+        self._status = PaymentStatus.REFUNDED
 
     def to_dict(self) -> dict:
+        """永続化用の辞書表現を返す"""
         return {
             "payment_id": str(self.id),
-            "trip_id": self.trip_id,
-            "amount": str(self.amount),
-            "currency": self.currency,
-            "status": self.status.value,
+            "trip_id": str(self._trip_id),
+            "amount": str(self._amount.amount),
+            "currency": str(self._amount.currency),
+            "status": self._status.value,
         }
 ```
 
-### 5.3 Handler Layer: リクエストバリデーション
+### 5.4 Domain Layer: payment/domain/__init__.py
 
-`services/payment/handlers/request_models.py` を作成します。
+```python
+from .payment_id import PaymentId
+from .payment_status import PaymentStatus
+from .payment import Payment
+
+__all__ = [
+    "PaymentId",
+    "PaymentStatus",
+    "Payment",
+]
+```
+
+### 5.5 Domain Layer: Factory
+
+`services/payment/domain/payment_factory.py`
+
+```python
+from decimal import Decimal
+
+from services.shared.domain import TripId, Money, Currency
+
+from services.payment.domain.payment import Payment
+from services.payment.domain.payment_id import PaymentId
+from services.payment.domain.payment_status import PaymentStatus
+
+
+class PaymentFactory:
+    """決済ファクトリ
+
+    - 冪等性を担保する ID 生成
+    - プリミティブ型から Value Object への変換
+    """
+
+    def create(
+        self,
+        trip_id: TripId,
+        amount: Decimal,
+        currency_code: str,
+    ) -> Payment:
+        """新規決済エンティティを生成する"""
+        # 冪等性担保: 同じ TripId からは常に同じ PaymentId を生成
+        payment_id = PaymentId.from_trip_id(trip_id)
+
+        # プリミティブ型から Value Object に変換
+        money = Money(amount=amount, currency=Currency(currency_code))
+
+        return Payment(
+            id=payment_id,
+            trip_id=trip_id,
+            amount=money,
+            status=PaymentStatus.PENDING,
+        )
+```
+
+### 5.6 Handler Layer: リクエストバリデーション
+
+`services/payment/handlers/request_models.py`
 
 ```python
 from decimal import Decimal
@@ -453,7 +732,7 @@ class RefundPaymentRequest(BaseModel):
     trip_id: str = Field(..., min_length=1)
 ```
 
-### 5.4 Handler Layer: Lambda エントリーポイント
+### 5.7 Handler Layer: Lambda エントリーポイント
 
 `services/payment/handlers/process.py`
 
@@ -462,17 +741,28 @@ from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
+from services.shared.domain import TripId
+
+from services.payment.applications.process_payment import ProcessPaymentService
+from services.payment.adapters.dynamodb_payment_repository import (
+    DynamoDBPaymentRepository,
+)
+from services.payment.domain.payment_factory import PaymentFactory
 from services.payment.handlers.request_models import ProcessPaymentRequest
 
 logger = Logger()
 tracer = Tracer()
 
-# ... 依存関係の組み立て（Flight Service と同様）
+# 依存関係の組み立て（Composition Root）
+repository = DynamoDBPaymentRepository()
+factory = PaymentFactory()
+service = ProcessPaymentService(repository=repository, factory=factory)
 
 
 @logger.inject_lambda_context
 @tracer.capture_lambda_handler
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    """決済処理 Lambda ハンドラ"""
     logger.info("Received process payment request", extra={"event": event})
 
     # 入力バリデーション
@@ -489,10 +779,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 
     # Application Service 呼び出し
     try:
+        trip_id = TripId(value=request.trip_id)
         result = service.process(
-            trip_id=request.trip_id,
+            trip_id=trip_id,
             amount=request.amount,
-            currency=request.currency,
+            currency_code=request.currency,
         )
         return {"status": "success", "data": result}
 
@@ -619,7 +910,35 @@ class Functions(Construct):
         table.grant_read_write_data(self.payment_refund)
 ```
 
-## 7. パターンの効果
+## 7. 単体テストの配置
+
+### テストファイル構造
+
+```
+tests/unit/services/
+├── shared/
+│   └── domain/
+│       ├── test_trip_id.py
+│       ├── test_money.py
+│       ├── test_currency.py
+│       └── test_date_time.py
+├── hotel/
+│   ├── domain/
+│   │   ├── test_hotel_booking_id.py
+│   │   ├── test_hotel_name.py
+│   │   ├── test_stay_period.py
+│   │   └── test_hotel_booking.py
+│   ├── test_hotel_booking_factory.py
+│   └── test_reserve_hotel.py
+└── payment/
+    ├── domain/
+    │   ├── test_payment_id.py
+    │   └── test_payment.py
+    ├── test_payment_factory.py
+    └── test_process_payment.py
+```
+
+## 8. パターンの効果
 
 Hands-on 04 で確立したパターンにより、以下の効果が得られます：
 
@@ -628,9 +947,11 @@ Hands-on 04 で確立したパターンにより、以下の効果が得られ�
 | **開発効率** | 同じ構造を横展開するだけで新サービスを追加可能 |
 | **テスト容易性** | Repository をモックに差し替えて単体テスト可能 |
 | **保守性** | 責務が明確に分離され、変更の影響範囲が限定的 |
-| **冪等性** | Factory でのID生成により、リトライ時も同じエンティティを生成 |
+| **冪等性** | Factory での ID 生成により、リトライ時も同じエンティティを生成 |
+| **型安全性** | Value Object により、プリミティブ型の取り違えを防止 |
+| **ドメイン表現** | Value Object によりビジネスルールがコードで表現される |
 
-## 8. 次のステップ
+## 9. 次のステップ
 
 3つのマイクロサービス（Flight, Hotel, Payment）の実装が完了しました。
 次は、これらを Step Functions で連携させ、Saga パターンを実現します。
