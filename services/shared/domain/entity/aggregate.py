@@ -1,6 +1,6 @@
 from typing import TypeVar
 
-from services.shared.domain.entity import Entity
+from .entity import Entity
 
 ID = TypeVar("ID")
 
