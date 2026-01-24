@@ -1,16 +1,15 @@
 from abc import abstractmethod
 from typing import Optional
 
-from services.shared.domain import Repository, TripId
-
-from services.flight.domain.value_object import BookingId
 from services.flight.domain.entity import Booking
+from services.flight.domain.value_object import BookingId
+from services.shared.domain import Repository, TripId
 
 
 class BookingRepository(Repository[Booking, BookingId]):
     """フライト予約リポジトリのインターフェース
 
-    Domain 層で定義し、具象実装は Adapter 層で行う。
+    Domain 層で定義し、具象実装は Infrastructure 層で行う。
     これにより、Domain はインフラ（DynamoDB 等）に依存しない。
     """
 

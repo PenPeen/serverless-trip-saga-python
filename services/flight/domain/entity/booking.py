@@ -1,7 +1,6 @@
-from services.shared.domain import Entity, TripId, Money, DateTime
-from services.shared.domain.exception import BusinessRuleViolationException
-
 from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.shared.domain import DateTime, Entity, Money, TripId
+from services.shared.domain.exception import BusinessRuleViolationException
 
 
 class Booking(Entity[BookingId]):
@@ -66,9 +65,7 @@ class Booking(Entity[BookingId]):
     def confirm(self) -> None:
         """予約を確定する"""
         if self._status == BookingStatus.CANCELLED:
-            raise BusinessRuleViolationException(
-                "Cannot confirm a cancelled booking"
-            )
+            raise BusinessRuleViolationException("Cannot confirm a cancelled booking")
         self._status = BookingStatus.CONFIRMED
 
     def cancel(self) -> None:
