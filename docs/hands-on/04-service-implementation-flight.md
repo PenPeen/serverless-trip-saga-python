@@ -16,22 +16,32 @@ DDD (ドメイン駆動設計) のレイヤー構造を適用し、Hands-on 03 �
 ### 2.1 共通 Value Object（shared/domain/）
 
 複数のサービスで共通して使用する Value Object を `shared/domain/` に配置します。
+種別ごとにサブディレクトリを分けて整理します。
 
 ```
 services/shared/domain/
-├── __init__.py
-├── entity.py              # Entity 基底クラス（Hands-on 03 で作成済み）
-├── repository.py          # Repository 基底クラス（Hands-on 03 で作成済み）
-├── exceptions.py          # 例外（Hands-on 03 で作成済み）
-├── trip_id.py             # TripId（全サービス共通）
-├── money.py               # Money（金額）
-├── currency.py            # Currency（通貨）
-└── date_time.py           # DateTime（日時）
+├── __init__.py                    # 全体の re-export
+├── entity/
+│   ├── __init__.py
+│   ├── entity.py                 # Entity 基底クラス（Hands-on 03 で作成済み）
+│   └── aggregate.py              # AggregateRoot 基底クラス（Hands-on 03 で作成済み）
+├── value_object/
+│   ├── __init__.py
+│   ├── trip_id.py                # TripId（全サービス共通）
+│   ├── currency.py               # Currency（通貨）
+│   ├── money.py                  # Money（金額）
+│   └── date_time.py              # DateTime（日時）
+├── repository/
+│   ├── __init__.py
+│   └── repository.py             # Repository 基底クラス（Hands-on 03 で作成済み）
+└── exception/
+    ├── __init__.py
+    └── exceptions.py             # 例外（Hands-on 03 で作成済み）
 ```
 
 ### 2.2 Flight Service（flight/）
 
-Value Object と Entity はファイルを分けて配置し、肥大化に備えます。
+Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
 
 ```
 services/flight/
@@ -45,12 +55,20 @@ services/flight/
 │   └── reserve_flight.py      # ユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── booking_id.py          # BookingId（Value Object）
-│   ├── booking_status.py      # BookingStatus（Enum）
-│   ├── flight_number.py       # FlightNumber（Value Object）
-│   ├── booking.py             # Booking（Entity）
-│   ├── booking_factory.py     # Factory
-│   └── booking_repository.py  # Repository インターフェース
+│   ├── entity/
+│   │   ├── __init__.py
+│   │   └── booking.py         # Booking（Entity）
+│   ├── value_object/
+│   │   ├── __init__.py
+│   │   ├── booking_id.py      # BookingId（Value Object）
+│   │   ├── booking_status.py  # BookingStatus（Enum）
+│   │   └── flight_number.py   # FlightNumber（Value Object）
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── booking_repository.py  # Repository インターフェース
+│   └── factory/
+│       ├── __init__.py
+│       └── booking_factory.py # Factory
 └── adapters/
     ├── __init__.py
     └── dynamodb_booking_repository.py  # Repository 具象実装
@@ -62,7 +80,7 @@ services/flight/
 
 まず、複数サービスで共通して使用する Value Object を実装します。
 
-#### TripId（`services/shared/domain/trip_id.py`）
+#### TripId（`services/shared/domain/value_object/trip_id.py`）
 
 全サービスで使用される旅行IDです。
 
@@ -87,7 +105,7 @@ class TripId:
         return self.value
 ```
 
-#### Currency（`services/shared/domain/currency.py`）
+#### Currency（`services/shared/domain/value_object/currency.py`）
 
 ISO 4217 に準拠した通貨コードを表現します。
 
@@ -123,7 +141,7 @@ class Currency:
         return cls("USD")
 ```
 
-#### Money（`services/shared/domain/money.py`）
+#### Money（`services/shared/domain/value_object/money.py`）
 
 金額と通貨を組み合わせた Value Object です。
 
@@ -131,7 +149,7 @@ class Currency:
 from dataclasses import dataclass
 from decimal import Decimal
 
-from services.shared.domain.currency import Currency
+from .currency import Currency
 
 
 @dataclass(frozen=True)
@@ -163,7 +181,7 @@ class Money:
         return cls(amount=Decimal(str(amount)), currency=Currency.jpy())
 ```
 
-#### DateTime（`services/shared/domain/date_time.py`）
+#### DateTime（`services/shared/domain/value_object/date_time.py`）
 
 ISO 8601 形式の日時を表現する Value Object です。
 
@@ -207,24 +225,22 @@ class DateTime:
 #### shared/domain/__init__.py の更新
 
 ```python
-from .entity import Entity
+from .entity import Entity, AggregateRoot
 from .repository import Repository
-from .exceptions import (
-    BusinessRuleViolationException,
+from .exception import (
     DomainException,
     ResourceNotFoundException,
+    BusinessRuleViolationException,
 )
-from .trip_id import TripId
-from .currency import Currency
-from .money import Money
-from .date_time import DateTime
+from .value_object import TripId, Currency, Money, DateTime
 
 __all__ = [
     "Entity",
+    "AggregateRoot",
     "Repository",
-    "BusinessRuleViolationException",
     "DomainException",
     "ResourceNotFoundException",
+    "BusinessRuleViolationException",
     "TripId",
     "Currency",
     "Money",
@@ -234,7 +250,7 @@ __all__ = [
 
 ### 3.2 Flight 固有の Value Object
 
-#### BookingId（`services/flight/domain/booking_id.py`）
+#### BookingId（`services/flight/domain/value_object/booking_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -263,7 +279,7 @@ class BookingId:
         return cls(value=f"flight_for_{trip_id}")
 ```
 
-#### BookingStatus（`services/flight/domain/booking_status.py`）
+#### BookingStatus（`services/flight/domain/value_object/booking_status.py`）
 
 ```python
 from enum import Enum
@@ -276,7 +292,7 @@ class BookingStatus(str, Enum):
     CANCELLED = "CANCELLED"
 ```
 
-#### FlightNumber（`services/flight/domain/flight_number.py`）
+#### FlightNumber（`services/flight/domain/value_object/flight_number.py`）
 
 ```python
 import re
@@ -320,17 +336,15 @@ class FlightNumber:
 
 ### 3.3 Domain Layer: Booking Entity
 
-`services/flight/domain/booking.py`
+`services/flight/domain/entity/booking.py`
 
 Entity は Value Object を使用してドメインの概念を表現します。
 
 ```python
 from services.shared.domain import Entity, TripId, Money, DateTime
-from services.shared.domain.exceptions import BusinessRuleViolationException
+from services.shared.domain.exception import BusinessRuleViolationException
 
-from services.flight.domain.booking_id import BookingId
-from services.flight.domain.booking_status import BookingStatus
-from services.flight.domain.flight_number import FlightNumber
+from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
 
 
 class Booking(Entity[BookingId]):
@@ -405,38 +419,28 @@ class Booking(Entity[BookingId]):
         self._status = BookingStatus.CANCELLED
 ```
 
-> **設計ポイント: Entity に `to_dict()` を持たせない理由**
->
-> - **Domain層は純粋なビジネスロジックに集中すべき**
-> - 永続化形式（DynamoDB）やレスポンス形式（JSON）は Domain の関心事ではない
-> - 各層が自分の責務だけを持つことで、変更の影響範囲が限定される
->
-> | 層 | 責務 |
-> |---|---|
-> | **Domain** | ビジネスロジックのみ。外部表現を知らない |
-> | **Application** | ユースケースの調整。Entity を返す |
-> | **Handler** | HTTP/Lambda 固有の入出力変換 |
-> | **Adapter** | 永続化技術固有の変換 |
-
 ### 3.4 Domain Layer: flight/domain/__init__.py
 
 ```python
-from .booking_id import BookingId
-from .booking_status import BookingStatus
-from .flight_number import FlightNumber
-from .booking import Booking
+from .entity import Booking
+from .value_object import BookingId, BookingStatus, FlightNumber
+from .repository import BookingRepository
+from .factory import BookingFactory, FlightDetails
 
 __all__ = [
+    "Booking",
     "BookingId",
     "BookingStatus",
     "FlightNumber",
-    "Booking",
+    "BookingRepository",
+    "BookingFactory",
+    "FlightDetails",
 ]
 ```
 
 ### 3.5 Domain Layer: Repository インターフェース
 
-`services/flight/domain/booking_repository.py`
+`services/flight/domain/repository/booking_repository.py`
 
 ```python
 from abc import abstractmethod
@@ -444,8 +448,8 @@ from typing import Optional
 
 from services.shared.domain import Repository, TripId
 
-from services.flight.domain.booking_id import BookingId
-from services.flight.domain.booking import Booking
+from services.flight.domain.value_object import BookingId
+from services.flight.domain.entity import Booking
 
 
 class BookingRepository(Repository[Booking, BookingId]):
@@ -473,7 +477,7 @@ class BookingRepository(Repository[Booking, BookingId]):
 
 ### 3.6 Domain Layer: Factory パターン
 
-`services/flight/domain/booking_factory.py`
+`services/flight/domain/factory/booking_factory.py`
 
 Factory はエンティティの生成ロジックをカプセル化します。
 
@@ -483,10 +487,8 @@ from typing import TypedDict
 
 from services.shared.domain import TripId, Money, Currency, DateTime
 
-from services.flight.domain.booking import Booking
-from services.flight.domain.booking_id import BookingId
-from services.flight.domain.booking_status import BookingStatus
-from services.flight.domain.flight_number import FlightNumber
+from services.flight.domain.entity import Booking
+from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
 
 
 class FlightDetails(TypedDict):
@@ -552,11 +554,9 @@ import boto3
 
 from services.shared.domain import TripId, Money, Currency, DateTime
 
-from services.flight.domain.booking import Booking
-from services.flight.domain.booking_id import BookingId
-from services.flight.domain.booking_status import BookingStatus
-from services.flight.domain.flight_number import FlightNumber
-from services.flight.domain.booking_repository import BookingRepository
+from services.flight.domain.entity import Booking
+from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.flight.domain.repository import BookingRepository
 
 
 class DynamoDBBookingRepository(BookingRepository):
@@ -632,9 +632,9 @@ class DynamoDBBookingRepository(BookingRepository):
 ```python
 from services.shared.domain import TripId
 
-from services.flight.domain.booking import Booking
-from services.flight.domain.booking_factory import BookingFactory, FlightDetails
-from services.flight.domain.booking_repository import BookingRepository
+from services.flight.domain.entity import Booking
+from services.flight.domain.factory import BookingFactory, FlightDetails
+from services.flight.domain.repository import BookingRepository
 
 
 class ReserveFlightService:
@@ -769,7 +769,7 @@ from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.adapters.dynamodb_booking_repository import DynamoDBBookingRepository
-from services.flight.domain.booking_factory import BookingFactory
+from services.flight.domain.factory import BookingFactory
 from services.flight.handlers.request_models import ReserveFlightRequest
 
 logger = Logger()
@@ -891,18 +891,22 @@ Value Object と Entity を分離したことで、テストも細かく分割�
 tests/unit/services/
 ├── shared/
 │   └── domain/
-│       ├── __init__.py
-│       ├── test_trip_id.py
-│       ├── test_money.py
-│       ├── test_currency.py
-│       └── test_date_time.py
+│       └── value_object/
+│           ├── __init__.py
+│           ├── test_trip_id.py
+│           ├── test_money.py
+│           ├── test_currency.py
+│           └── test_date_time.py
 └── flight/
     ├── __init__.py
     ├── domain/
-    │   ├── __init__.py
-    │   ├── test_booking_id.py
-    │   ├── test_flight_number.py
-    │   └── test_booking.py
+    │   ├── entity/
+    │   │   ├── __init__.py
+    │   │   └── test_booking.py
+    │   └── value_object/
+    │       ├── __init__.py
+    │       ├── test_booking_id.py
+    │       └── test_flight_number.py
     ├── test_booking_factory.py
     ├── test_request_models.py
     └── test_reserve_flight.py
@@ -913,7 +917,7 @@ tests/unit/services/
 ```python
 import pytest
 
-from services.flight.domain.flight_number import FlightNumber
+from services.flight.domain.value_object import FlightNumber
 
 
 class TestFlightNumber:
@@ -950,12 +954,10 @@ import pytest
 from decimal import Decimal
 
 from services.shared.domain import TripId, Money, Currency, DateTime
-from services.shared.domain.exceptions import BusinessRuleViolationException
+from services.shared.domain.exception import BusinessRuleViolationException
 
-from services.flight.domain.booking import Booking
-from services.flight.domain.booking_id import BookingId
-from services.flight.domain.booking_status import BookingStatus
-from services.flight.domain.flight_number import FlightNumber
+from services.flight.domain.entity import Booking
+from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
 
 
 class TestBooking:
@@ -1009,9 +1011,9 @@ from unittest.mock import MagicMock
 from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
-from services.flight.domain.booking import Booking
-from services.flight.domain.booking_status import BookingStatus
-from services.flight.domain.booking_factory import BookingFactory
+from services.flight.domain.entity import Booking
+from services.flight.domain.value_object import BookingStatus
+from services.flight.domain.factory import BookingFactory
 
 
 class TestReserveFlightService:
