@@ -30,7 +30,7 @@ services/shared/domain/
 │   ├── trip_id.py                # TripId（全サービス共通）
 │   ├── currency.py               # Currency（通貨）
 │   ├── money.py                  # Money（金額）
-│   └── date_time.py              # DateTime（日時）
+│   └── iso_date_time.py              # IsoDateTime（日時）
 ├── repository/
 │   ├── __init__.py
 │   └── repository.py             # Repository 基底クラス（Hands-on 03 で作成済み）
@@ -61,8 +61,10 @@ services/flight/
 │   ├── value_object/
 │   │   ├── __init__.py
 │   │   ├── booking_id.py      # BookingId（Value Object）
-│   │   ├── booking_status.py  # BookingStatus（Enum）
 │   │   └── flight_number.py   # FlightNumber（Value Object）
+│   ├── enum/
+│   │   ├── __init__.py
+│   │   └── booking_status.py  # BookingStatus（Enum）
 │   ├── repository/
 │   │   ├── __init__.py
 │   │   └── booking_repository.py  # Repository インターフェース
@@ -179,11 +181,17 @@ class Money:
     def jpy(cls, amount: Decimal | int | str) -> "Money":
         """日本円で Money を生成"""
         return cls(amount=Decimal(str(amount)), currency=Currency.jpy())
+
+    @classmethod
+    def usd(cls, amount: Decimal | int | str) -> "Money":
+        """米ドルで Money を生成"""
+        return cls(amount=Decimal(str(amount)), currency=Currency.usd())
 ```
 
-#### DateTime（`services/shared/domain/value_object/date_time.py`）
+#### IsoDateTime（`services/shared/domain/value_object/iso_date_time.py`）
 
 ISO 8601 形式の日時を表現する Value Object です。
+内部では `datetime` 型を保持し、型安全性を確保します。
 
 ```python
 from dataclasses import dataclass
@@ -191,35 +199,33 @@ from datetime import datetime
 
 
 @dataclass(frozen=True)
-class DateTime:
+class IsoDateTime:
     """日時（ISO 8601 形式）
 
     Value Object として不変性を保証。
-    日時の比較や変換メソッドを提供。
+    内部では datetime 型を保持し、型安全性を確保。
     """
-    value: str
-
-    def __post_init__(self) -> None:
-        # ISO 8601 形式のバリデーション
-        try:
-            datetime.fromisoformat(self.value.replace("Z", "+00:00"))
-        except ValueError as e:
-            raise ValueError(f"Invalid ISO 8601 datetime: {self.value}") from e
+    value: datetime
 
     def __str__(self) -> str:
-        return self.value
+        return self.value.isoformat()
 
-    def to_datetime(self) -> datetime:
-        """datetime オブジェクトに変換"""
-        return datetime.fromisoformat(self.value.replace("Z", "+00:00"))
+    @classmethod
+    def from_string(cls, s: str) -> "IsoDateTime":
+        """ISO 8601 形式の文字列から生成"""
+        try:
+            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        except ValueError as e:
+            raise ValueError(f"Invalid ISO 8601 datetime: {s}") from e
+        return cls(value=dt)
 
-    def is_before(self, other: "DateTime") -> bool:
+    def is_before(self, other: "IsoDateTime") -> bool:
         """他の日時より前かどうか"""
-        return self.to_datetime() < other.to_datetime()
+        return self.value < other.value
 
-    def is_after(self, other: "DateTime") -> bool:
+    def is_after(self, other: "IsoDateTime") -> bool:
         """他の日時より後かどうか"""
-        return self.to_datetime() > other.to_datetime()
+        return self.value > other.value
 ```
 
 #### shared/domain/__init__.py の更新
@@ -232,7 +238,7 @@ from .exception import (
     ResourceNotFoundException,
     BusinessRuleViolationException,
 )
-from .value_object import TripId, Currency, Money, DateTime
+from .value_object import TripId, Currency, Money, IsoDateTime
 
 __all__ = [
     "Entity",
@@ -244,7 +250,7 @@ __all__ = [
     "TripId",
     "Currency",
     "Money",
-    "DateTime",
+    "IsoDateTime",
 ]
 ```
 
@@ -262,7 +268,8 @@ from services.shared.domain import TripId
 class BookingId:
     """フライト予約ID（Value Object）
 
-    不変で、値が同じなら同一とみなされる。
+    TripId から派生した冪等なID。
+    例: "flight_for_trip-123"
     """
     value: str
 
@@ -279,7 +286,7 @@ class BookingId:
         return cls(value=f"flight_for_{trip_id}")
 ```
 
-#### BookingStatus（`services/flight/domain/value_object/booking_status.py`）
+#### BookingStatus（`services/flight/domain/enum/booking_status.py`）
 
 ```python
 from enum import Enum
@@ -341,10 +348,11 @@ class FlightNumber:
 Entity は Value Object を使用してドメインの概念を表現します。
 
 ```python
-from services.shared.domain import Entity, TripId, Money, DateTime
+from services.shared.domain import Entity, TripId, Money, IsoDateTime
 from services.shared.domain.exception import BusinessRuleViolationException
 
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
 
 
 class Booking(Entity[BookingId]):
@@ -359,8 +367,8 @@ class Booking(Entity[BookingId]):
         id: BookingId,
         trip_id: TripId,
         flight_number: FlightNumber,
-        departure_time: DateTime,
-        arrival_time: DateTime,
+        departure_time: IsoDateTime,
+        arrival_time: IsoDateTime,
         price: Money,
         status: BookingStatus = BookingStatus.PENDING,
     ) -> None:
@@ -391,11 +399,11 @@ class Booking(Entity[BookingId]):
         return self._flight_number
 
     @property
-    def departure_time(self) -> DateTime:
+    def departure_time(self) -> IsoDateTime:
         return self._departure_time
 
     @property
-    def arrival_time(self) -> DateTime:
+    def arrival_time(self) -> IsoDateTime:
         return self._arrival_time
 
     @property
@@ -423,9 +431,10 @@ class Booking(Entity[BookingId]):
 
 ```python
 from .entity import Booking
-from .value_object import BookingId, BookingStatus, FlightNumber
-from .repository import BookingRepository
+from .enum import BookingStatus
 from .factory import BookingFactory, FlightDetails
+from .repository import BookingRepository
+from .value_object import BookingId, FlightNumber
 
 __all__ = [
     "Booking",
@@ -485,10 +494,11 @@ Factory はエンティティの生成ロジックをカプセル化します。
 from decimal import Decimal
 from typing import TypedDict
 
-from services.shared.domain import TripId, Money, Currency, DateTime
+from services.shared.domain import TripId, Money, Currency, IsoDateTime
 
 from services.flight.domain.entity import Booking
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
 
 
 class FlightDetails(TypedDict):
@@ -523,8 +533,8 @@ class BookingFactory:
 
         # プリミティブ型から Value Object に変換
         flight_number = FlightNumber(flight_details["flight_number"])
-        departure_time = DateTime(flight_details["departure_time"])
-        arrival_time = DateTime(flight_details["arrival_time"])
+        departure_time = IsoDateTime.from_string(flight_details["departure_time"])
+        arrival_time = IsoDateTime.from_string(flight_details["arrival_time"])
         price = Money(
             amount=flight_details["price_amount"],
             currency=Currency(flight_details["price_currency"]),
@@ -552,10 +562,11 @@ from decimal import Decimal
 
 import boto3
 
-from services.shared.domain import TripId, Money, Currency, DateTime
+from services.shared.domain import TripId, Money, Currency, IsoDateTime
 
 from services.flight.domain.entity import Booking
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
 from services.flight.domain.repository import BookingRepository
 
 
@@ -615,8 +626,8 @@ class DynamoDBBookingRepository(BookingRepository):
             id=BookingId(value=item["booking_id"]),
             trip_id=TripId(value=item["trip_id"]),
             flight_number=FlightNumber(value=item["flight_number"]),
-            departure_time=DateTime(value=item["departure_time"]),
-            arrival_time=DateTime(value=item["arrival_time"]),
+            departure_time=IsoDateTime.from_string(item["departure_time"]),
+            arrival_time=IsoDateTime.from_string(item["arrival_time"]),
             price=Money(
                 amount=Decimal(item["price_amount"]),
                 currency=Currency(item["price_currency"]),
@@ -896,7 +907,7 @@ tests/unit/services/
 │           ├── test_trip_id.py
 │           ├── test_money.py
 │           ├── test_currency.py
-│           └── test_date_time.py
+│           └── test_iso_date_time.py
 └── flight/
     ├── __init__.py
     ├── domain/
@@ -953,11 +964,12 @@ class TestFlightNumber:
 import pytest
 from decimal import Decimal
 
-from services.shared.domain import TripId, Money, Currency, DateTime
+from services.shared.domain import TripId, Money, Currency, IsoDateTime
 from services.shared.domain.exception import BusinessRuleViolationException
 
 from services.flight.domain.entity import Booking
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
 
 
 class TestBooking:
@@ -971,8 +983,8 @@ class TestBooking:
             id=BookingId(value="test-id"),
             trip_id=TripId(value="trip-123"),
             flight_number=FlightNumber(value="NH001"),
-            departure_time=DateTime(value="2024-01-01T10:00:00"),
-            arrival_time=DateTime(value="2024-01-01T12:00:00"),
+            departure_time=IsoDateTime.from_string("2024-01-01T10:00:00"),
+            arrival_time=IsoDateTime.from_string("2024-01-01T12:00:00"),
             price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
             status=status,
         )
@@ -996,8 +1008,8 @@ class TestBooking:
                 id=BookingId(value="test-id"),
                 trip_id=TripId(value="trip-123"),
                 flight_number=FlightNumber(value="NH001"),
-                departure_time=DateTime(value="2024-01-01T12:00:00"),  # 後
-                arrival_time=DateTime(value="2024-01-01T10:00:00"),    # 前
+                departure_time=IsoDateTime.from_string("2024-01-01T12:00:00"),  # 後
+                arrival_time=IsoDateTime.from_string("2024-01-01T10:00:00"),    # 前
                 price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
             )
 ```
@@ -1012,7 +1024,7 @@ from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.domain.entity import Booking
-from services.flight.domain.value_object import BookingStatus
+from services.flight.domain.enum import BookingStatus
 from services.flight.domain.factory import BookingFactory
 
 

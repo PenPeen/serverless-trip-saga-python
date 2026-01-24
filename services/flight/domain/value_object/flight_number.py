@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class FlightNumber:
-    """フライト番号（Value Object）
+    """フライト番号
 
     航空会社コード（2文字）+ 便名番号（1-4桁）の形式。
     例: NH001, JL123, AA1234
@@ -19,7 +19,7 @@ class FlightNumber:
         normalized = self.value.upper()
         if not self.PATTERN.match(normalized):
             raise ValueError(
-                f"Invalid flight number format: {self.value}. "
+                f"Invalid flight number format: {self.value}."
                 "Expected format: AA123 (2 letters + 1-4 digits)"
             )
         object.__setattr__(self, "value", normalized)
@@ -29,7 +29,7 @@ class FlightNumber:
 
     @property
     def airline_code(self) -> str:
-        """航空会社コード（2文字）"""
+        """航空会社コード（冒頭2文字）"""
         return self.value[:2]
 
     @property

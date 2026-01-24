@@ -2,8 +2,9 @@ from decimal import Decimal
 from typing import TypedDict
 
 from services.flight.domain.entity import Booking
-from services.flight.domain.value_object import BookingId, BookingStatus, FlightNumber
-from services.shared.domain import Currency, DateTime, Money, TripId
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
+from services.shared.domain import Currency, IsoDateTime, Money, TripId
 
 
 class FlightDetails(TypedDict):
@@ -39,8 +40,8 @@ class BookingFactory:
 
         # プリミティブ型から Value Object に変換
         flight_number = FlightNumber(flight_details["flight_number"])
-        departure_time = DateTime(flight_details["departure_time"])
-        arrival_time = DateTime(flight_details["arrival_time"])
+        departure_time = IsoDateTime.from_string(flight_details["departure_time"])
+        arrival_time = IsoDateTime.from_string(flight_details["arrival_time"])
         price = Money(
             amount=flight_details["price_amount"],
             currency=Currency(flight_details["price_currency"]),

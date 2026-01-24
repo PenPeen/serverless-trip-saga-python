@@ -1,30 +1,38 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
 class Currency:
     """通貨コード（ISO 4217）
 
-    例: JPY, USD, EUR
+    サポート対象: JPY, USD
     """
+
+    SUPPORTED: ClassVar[frozenset[str]] = frozenset({"JPY", "USD"})
 
     code: str
 
     def __post_init__(self) -> None:
-        if len(self.code) != 3 or not self.code.isalpha():
-            raise ValueError(f"Invalid currency code: {self.code}")
-        # frozen=True でも __post_init__ 内では object.__setattr__ が必要
-        object.__setattr__(self, "code", self.code.upper())
+        normalized = self.code.upper()
+        if normalized not in self.SUPPORTED:
+            raise ValueError(
+                f"Unsupported currency: {self.code}. "
+                f"Supported: {', '.join(sorted(self.SUPPORTED))}"
+            )
+        object.__setattr__(self, "code", normalized)
 
     def __str__(self) -> str:
         return self.code
 
     @classmethod
-    def jpy(cls) -> "Currency":
+    def jpy(cls) -> Currency:
         """日本円"""
         return cls("JPY")
 
     @classmethod
-    def usd(cls) -> "Currency":
+    def usd(cls) -> Currency:
         """米ドル"""
         return cls("USD")
