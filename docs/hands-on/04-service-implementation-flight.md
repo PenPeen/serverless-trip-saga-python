@@ -403,20 +403,20 @@ class Booking(Entity[BookingId]):
     def cancel(self) -> None:
         """予約をキャンセルする（補償トランザクション用）"""
         self._status = BookingStatus.CANCELLED
-
-    def to_dict(self) -> dict:
-        """永続化用の辞書表現を返す"""
-        return {
-            "booking_id": str(self.id),
-            "trip_id": str(self._trip_id),
-            "flight_number": str(self._flight_number),
-            "departure_time": str(self._departure_time),
-            "arrival_time": str(self._arrival_time),
-            "price_amount": str(self._price.amount),
-            "price_currency": str(self._price.currency),
-            "status": self._status.value,
-        }
 ```
+
+> **設計ポイント: Entity に `to_dict()` を持たせない理由**
+>
+> - **Domain層は純粋なビジネスロジックに集中すべき**
+> - 永続化形式（DynamoDB）やレスポンス形式（JSON）は Domain の関心事ではない
+> - 各層が自分の責務だけを持つことで、変更の影響範囲が限定される
+>
+> | 層 | 責務 |
+> |---|---|
+> | **Domain** | ビジネスロジックのみ。外部表現を知らない |
+> | **Application** | ユースケースの調整。Entity を返す |
+> | **Handler** | HTTP/Lambda 固有の入出力変換 |
+> | **Adapter** | 永続化技術固有の変換 |
 
 ### 3.4 Domain Layer: flight/domain/__init__.py
 
@@ -568,12 +568,23 @@ class DynamoDBBookingRepository(BookingRepository):
         self.table = self.dynamodb.Table(self.table_name)
 
     def save(self, booking: Booking) -> None:
-        """予約を DynamoDB に保存する"""
+        """予約を DynamoDB に保存する
+
+        Adapter層の責務として、Entity から DynamoDB アイテムへの変換をここで行う。
+        Entity は永続化形式を知らないため、Repository が変換を担当する。
+        """
         item = {
             "PK": f"TRIP#{booking.trip_id}",
             "SK": f"FLIGHT#{booking.id}",
             "entity_type": "FLIGHT",
-            **booking.to_dict(),
+            "booking_id": str(booking.id),
+            "trip_id": str(booking.trip_id),
+            "flight_number": str(booking.flight_number),
+            "departure_time": str(booking.departure_time),
+            "arrival_time": str(booking.arrival_time),
+            "price_amount": str(booking.price.amount),
+            "price_currency": str(booking.price.currency),
+            "status": booking.status.value,
         }
         self.table.put_item(Item=item)
 
@@ -641,7 +652,7 @@ class ReserveFlightService:
         self._repository = repository
         self._factory = factory
 
-    def reserve(self, trip_id: TripId, flight_details: FlightDetails) -> dict:
+    def reserve(self, trip_id: TripId, flight_details: FlightDetails) -> Booking:
         """フライトを予約する
 
         Args:
@@ -649,7 +660,7 @@ class ReserveFlightService:
             flight_details: フライト詳細情報
 
         Returns:
-            dict: 予約結果
+            Booking: 予約エンティティ（Handler層でレスポンス形式に変換する）
         """
         # 1. Factory でエンティティを生成（ID生成・Value Object変換はFactoryに委譲）
         booking: Booking = self._factory.create(trip_id, flight_details)
@@ -657,8 +668,8 @@ class ReserveFlightService:
         # 2. Repository で永続化
         self._repository.save(booking)
 
-        # 3. 結果の返却
-        return booking.to_dict()
+        # 3. Entity を返却（レスポンス形式への変換は Handler 層の責務）
+        return booking
 ```
 
 ### 3.9 Handler Layer: リクエストバリデーション
@@ -813,11 +824,23 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "price_currency": request.flight_details.price_currency,
         }
 
-        result = service.reserve(trip_id, flight_details)
+        booking = service.reserve(trip_id, flight_details)
 
+        # =====================================================================
+        # Handler層の責務: Entity をレスポンス形式に変換
+        # =====================================================================
         return {
             "status": "success",
-            "data": result,
+            "data": {
+                "booking_id": str(booking.id),
+                "trip_id": str(booking.trip_id),
+                "flight_number": str(booking.flight_number),
+                "departure_time": str(booking.departure_time),
+                "arrival_time": str(booking.arrival_time),
+                "price_amount": str(booking.price.amount),
+                "price_currency": str(booking.price.currency),
+                "status": booking.status.value,
+            },
         }
 
     except Exception as e:
@@ -995,7 +1018,7 @@ class TestReserveFlightService:
     """ReserveFlightService のテスト"""
 
     def test_reserve_creates_and_saves_booking(self):
-        """予約が作成され、Repository に保存される"""
+        """予約が作成され、Repository に保存され、Entity が返される"""
         # Arrange
         mock_repository = MagicMock()
         factory = BookingFactory()
@@ -1014,14 +1037,17 @@ class TestReserveFlightService:
         }
 
         # Act
-        result = service.reserve(trip_id, flight_details)
+        booking = service.reserve(trip_id, flight_details)
 
-        # Assert
+        # Assert: Entity が返されること
+        assert isinstance(booking, Booking)
+        assert booking.trip_id == trip_id
+        assert booking.status == BookingStatus.PENDING
+
+        # Assert: Repository.save が呼ばれたこと
         mock_repository.save.assert_called_once()
         saved_booking = mock_repository.save.call_args[0][0]
-        assert isinstance(saved_booking, Booking)
-        assert saved_booking.trip_id == trip_id
-        assert saved_booking.status == BookingStatus.PENDING
+        assert saved_booking == booking
 ```
 
 ### 4.5 テストの実行

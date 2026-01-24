@@ -244,21 +244,10 @@ class HotelBooking(Entity[HotelBookingId]):
     def cancel(self) -> None:
         """予約をキャンセルする（補償トランザクション用）"""
         self._status = HotelBookingStatus.CANCELLED
-
-    def to_dict(self) -> dict:
-        """永続化用の辞書表現を返す"""
-        return {
-            "booking_id": str(self.id),
-            "trip_id": str(self._trip_id),
-            "hotel_name": str(self._hotel_name),
-            "check_in_date": self._stay_period.check_in,
-            "check_out_date": self._stay_period.check_out,
-            "nights": self._stay_period.nights(),
-            "price_amount": str(self._price.amount),
-            "price_currency": str(self._price.currency),
-            "status": self._status.value,
-        }
 ```
+
+> **設計ポイント:** Entity に `to_dict()` を持たせない理由は Hands-on 04 を参照。
+> 永続化は Adapter 層、レスポンス変換は Handler 層の責務。
 
 ### 4.4 Domain Layer: hotel/domain/__init__.py
 
@@ -370,7 +359,49 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
         raise NotImplementedError
 ```
 
-### 4.7 Handler Layer: リクエストバリデーション
+### 4.7 Application Layer: 予約ユースケース
+
+`services/hotel/applications/reserve_hotel.py`
+
+```python
+from services.shared.domain import TripId
+
+from services.hotel.domain.hotel_booking import HotelBooking
+from services.hotel.domain.hotel_booking_factory import HotelBookingFactory, HotelDetails
+from services.hotel.domain.hotel_booking_repository import HotelBookingRepository
+
+
+class ReserveHotelService:
+    """ホテル予約ユースケース
+
+    Hands-on 04 の ReserveFlightService と同じパターン。
+    """
+
+    def __init__(
+        self,
+        repository: HotelBookingRepository,
+        factory: HotelBookingFactory,
+    ) -> None:
+        self._repository = repository
+        self._factory = factory
+
+    def reserve(self, trip_id: TripId, hotel_details: HotelDetails) -> HotelBooking:
+        """ホテルを予約する
+
+        Returns:
+            HotelBooking: 予約エンティティ（Handler層でレスポンス形式に変換する）
+        """
+        # 1. Factory でエンティティを生成
+        booking: HotelBooking = self._factory.create(trip_id, hotel_details)
+
+        # 2. Repository で永続化
+        self._repository.save(booking)
+
+        # 3. Entity を返却
+        return booking
+```
+
+### 4.8 Handler Layer: リクエストバリデーション
 
 `services/hotel/handlers/request_models.py`
 
@@ -488,8 +519,23 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "price_amount": request.hotel_details.price_amount,
             "price_currency": request.hotel_details.price_currency,
         }
-        result = service.reserve(trip_id, hotel_details)
-        return {"status": "success", "data": result}
+        booking = service.reserve(trip_id, hotel_details)
+
+        # Handler層の責務: Entity をレスポンス形式に変換
+        return {
+            "status": "success",
+            "data": {
+                "booking_id": str(booking.id),
+                "trip_id": str(booking.trip_id),
+                "hotel_name": str(booking.hotel_name),
+                "check_in_date": booking.stay_period.check_in,
+                "check_out_date": booking.stay_period.check_out,
+                "nights": booking.stay_period.nights(),
+                "price_amount": str(booking.price.amount),
+                "price_currency": str(booking.price.currency),
+                "status": booking.status.value,
+            },
+        }
 
     except Exception as e:
         logger.exception("Failed to reserve hotel")
@@ -625,17 +671,9 @@ class Payment(Entity[PaymentId]):
                 "Can only refund completed payments"
             )
         self._status = PaymentStatus.REFUNDED
-
-    def to_dict(self) -> dict:
-        """永続化用の辞書表現を返す"""
-        return {
-            "payment_id": str(self.id),
-            "trip_id": str(self._trip_id),
-            "amount": str(self._amount.amount),
-            "currency": str(self._amount.currency),
-            "status": self._status.value,
-        }
 ```
+
+> **設計ポイント:** Entity に `to_dict()` を持たせない理由は Hands-on 04 を参照。
 
 ### 5.4 Domain Layer: payment/domain/__init__.py
 
@@ -693,7 +731,59 @@ class PaymentFactory:
         )
 ```
 
-### 5.6 Handler Layer: リクエストバリデーション
+### 5.6 Application Layer: 決済ユースケース
+
+`services/payment/applications/process_payment.py`
+
+```python
+from decimal import Decimal
+
+from services.shared.domain import TripId
+
+from services.payment.domain.payment import Payment
+from services.payment.domain.payment_factory import PaymentFactory
+from services.payment.domain.payment_repository import PaymentRepository
+
+
+class ProcessPaymentService:
+    """決済処理ユースケース
+
+    Hands-on 04 の ReserveFlightService と同じパターン。
+    """
+
+    def __init__(
+        self,
+        repository: PaymentRepository,
+        factory: PaymentFactory,
+    ) -> None:
+        self._repository = repository
+        self._factory = factory
+
+    def process(
+        self,
+        trip_id: TripId,
+        amount: Decimal,
+        currency_code: str,
+    ) -> Payment:
+        """決済を処理する
+
+        Returns:
+            Payment: 決済エンティティ（Handler層でレスポンス形式に変換する）
+        """
+        # 1. Factory でエンティティを生成
+        payment: Payment = self._factory.create(trip_id, amount, currency_code)
+
+        # 2. 決済を完了
+        payment.complete()
+
+        # 3. Repository で永続化
+        self._repository.save(payment)
+
+        # 4. Entity を返却
+        return payment
+```
+
+### 5.7 Handler Layer: リクエストバリデーション
 
 `services/payment/handlers/request_models.py`
 
@@ -780,12 +870,23 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     # Application Service 呼び出し
     try:
         trip_id = TripId(value=request.trip_id)
-        result = service.process(
+        payment = service.process(
             trip_id=trip_id,
             amount=request.amount,
             currency_code=request.currency,
         )
-        return {"status": "success", "data": result}
+
+        # Handler層の責務: Entity をレスポンス形式に変換
+        return {
+            "status": "success",
+            "data": {
+                "payment_id": str(payment.id),
+                "trip_id": str(payment.trip_id),
+                "amount": str(payment.amount.amount),
+                "currency": str(payment.amount.currency),
+                "status": payment.status.value,
+            },
+        }
 
     except Exception as e:
         logger.exception("Failed to process payment")
