@@ -212,7 +212,7 @@ class AggregateRoot(Entity[ID]):
         """ドメインイベントを追加（Outbox Pattern で利用）"""
         self._domain_events.append(event)
 
-    def clear_domain_events(self) -> list:
+    def flush_domain_events(self) -> list:
         """ドメインイベントをクリアして返却"""
         events = self._domain_events.copy()
         self._domain_events.clear()
