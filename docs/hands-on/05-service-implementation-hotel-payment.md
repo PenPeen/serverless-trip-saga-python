@@ -178,12 +178,12 @@ class StayPeriod:
         return (check_out_date - check_in_date).days
 ```
 
-### 4.3 Domain Layer: HotelBooking Entity
+### 4.3 Domain Layer: HotelBooking AggregateRoot
 
 `services/hotel/domain/hotel_booking.py`
 
 ```python
-from services.shared.domain import Entity, TripId, Money
+from services.shared.domain import AggregateRoot, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
 from services.hotel.domain.hotel_booking_id import HotelBookingId
@@ -192,10 +192,10 @@ from services.hotel.domain.hotel_name import HotelName
 from services.hotel.domain.stay_period import StayPeriod
 
 
-class HotelBooking(Entity[HotelBookingId]):
+class HotelBooking(AggregateRoot[HotelBookingId]):
     """ホテル予約エンティティ
 
-    Entity 基底クラスを継承し、HotelBookingId で同一性を判定する。
+    AggregateRoot 基底クラスを継承し、HotelBookingId で同一性を判定する。
     全てのフィールドは Value Object で表現される。
     """
 
@@ -617,22 +617,22 @@ class PaymentStatus(str, Enum):
     FAILED = "FAILED"
 ```
 
-### 5.3 Domain Layer: Payment Entity
+### 5.3 Domain Layer: Payment AggregateRoot
 
 `services/payment/domain/payment.py`
 
 ```python
-from services.shared.domain import Entity, TripId, Money
+from services.shared.domain import AggregateRoot, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
 from services.payment.domain.payment_id import PaymentId
 from services.payment.domain.enum import PaymentStatus
 
 
-class Payment(Entity[PaymentId]):
+class Payment(AggregateRoot[PaymentId]):
     """決済エンティティ
 
-    Entity 基底クラスを継承し、PaymentId で同一性を判定する。
+    AggregateRoot 基底クラスを継承し、PaymentId で同一性を判定する。
     全てのフィールドは Value Object で表現される。
     """
 

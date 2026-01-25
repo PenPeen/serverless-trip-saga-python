@@ -341,24 +341,25 @@ class FlightNumber:
         return self.value[2:]
 ```
 
-### 3.3 Domain Layer: Booking Entity
+### 3.3 Domain Layer: Booking AggregateRoot
 
 `services/flight/domain/entity/booking.py`
 
-Entity は Value Object を使用してドメインの概念を表現します。
+AggregateRoot は Value Object を使用してドメインの概念を表現します。
+Repository を持つドメインモデルは AggregateRoot を継承します。
 
 ```python
-from services.shared.domain import Entity, TripId, Money, IsoDateTime
+from services.shared.domain import AggregateRoot, TripId, Money, IsoDateTime
 from services.shared.domain.exception import BusinessRuleViolationException
 
 from services.flight.domain.enum import BookingStatus
 from services.flight.domain.value_object import BookingId, FlightNumber
 
 
-class Booking(Entity[BookingId]):
+class Booking(AggregateRoot[BookingId]):
     """フライト予約エンティティ
 
-    Entity 基底クラスを継承し、BookingId で同一性を判定する。
+    AggregateRoot 基底クラスを継承し、BookingId で同一性を判定する。
     全てのフィールドは Value Object で表現される。
     """
 
