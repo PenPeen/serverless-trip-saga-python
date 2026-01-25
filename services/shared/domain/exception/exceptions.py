@@ -14,3 +14,9 @@ class BusinessRuleViolationException(DomainException):
     """ビジネスルールに違反した場合"""
 
     pass
+
+
+class DuplicateResourceException(DomainException):
+    """リソースの重複エラー（条件付き書き込みの失敗時）"""
+
+    pass
