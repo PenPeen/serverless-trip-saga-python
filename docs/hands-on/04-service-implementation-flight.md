@@ -554,6 +554,8 @@ class BookingFactory:
 
 ### 3.7 Infrastructure Layer: DynamoDB Repository 実装
 
+#### 3.7.1 基本実装
+
 `services/flight/infrastructure/dynamodb_booking_repository.py`
 
 ```python
@@ -562,8 +564,10 @@ from typing import Optional
 from decimal import Decimal
 
 import boto3
+from botocore.exceptions import ClientError
 
 from services.shared.domain import TripId, Money, Currency, IsoDateTime
+from services.shared.domain.exception import DuplicateResourceException
 
 from services.flight.domain.entity import Booking
 from services.flight.domain.enum import BookingStatus
@@ -584,6 +588,9 @@ class DynamoDBBookingRepository(BookingRepository):
 
         Infrastructure層の責務として、Entity から DynamoDB アイテムへの変換をここで行う。
         Entity は永続化形式を知らないため、Repository が変換を担当する。
+
+        条件付き書き込みにより、同一キーのアイテムが既に存在する場合は
+        DuplicateResourceException を発生させる。
         """
         item = {
             "PK": f"TRIP#{booking.trip_id}",
@@ -598,7 +605,18 @@ class DynamoDBBookingRepository(BookingRepository):
             "price_currency": str(booking.price.currency),
             "status": booking.status.value,
         }
-        self.table.put_item(Item=item)
+
+        try:
+            self.table.put_item(
+                Item=item,
+                ConditionExpression="attribute_not_exists(PK)",
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DuplicateResourceException(
+                    f"Booking already exists: {booking.id}"
+                )
+            raise
 
     def find_by_id(self, booking_id: BookingId) -> Optional[Booking]:
         """予約IDで検索する（GSI が必要、今回は未実装）"""
@@ -635,6 +653,99 @@ class DynamoDBBookingRepository(BookingRepository):
             ),
             status=BookingStatus(item["status"]),
         )
+```
+
+#### 3.7.2 条件付き書き込みによる重複防止
+
+上記の `save` メソッドでは、DynamoDB の**条件付き書き込み**を使用しています。
+
+##### なぜ条件付き書き込みが必要か
+
+通常の `put_item` は無条件でアイテムを上書きします。これには以下の問題があります：
+
+- **重複リクエスト**: ネットワーク障害等でリトライが発生した場合、同じデータが複数回書き込まれる可能性
+- **データ整合性**: Saga パターンでは冪等性が重要。同一リクエストの重複実行時にデータ整合性を保証する必要がある
+
+##### `attribute_not_exists` の動作
+
+```python
+self.table.put_item(
+    Item=item,
+    ConditionExpression="attribute_not_exists(PK)",
+)
+```
+
+- `attribute_not_exists(PK)`: PK 属性が存在しない場合のみ書き込みを許可
+- 既にアイテムが存在する場合、`ConditionalCheckFailedException` が発生
+- これにより「新規作成のみ許可、上書き禁止」を実現
+
+##### エラーハンドリング
+
+```python
+except ClientError as e:
+    if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+        raise DuplicateResourceException(
+            f"Booking already exists: {booking.id}"
+        )
+    raise
+```
+
+- `ConditionalCheckFailedException` をキャッチし、ドメイン層の例外に変換
+- その他のエラー（ネットワーク障害等）は再送出
+
+##### 発展: 楽観的ロック
+
+本ハンズオンでは「新規作成時の重複防止」のみを扱いますが、更新処理では**楽観的ロック**（バージョン管理）が有効です：
+
+```python
+# 更新時の例（本ハンズオンの範囲外）
+self.table.put_item(
+    Item={**item, "version": new_version},
+    ConditionExpression="version = :expected_version",
+    ExpressionAttributeValues={":expected_version": current_version},
+)
+```
+
+これにより、同時更新による競合を検出できます。
+
+#### 3.7.3 例外クラスの追加
+
+`services/shared/domain/exception/exceptions.py` に `DuplicateResourceException` を追加します。
+
+```python
+class DomainException(Exception):
+    """ドメイン層で発生する基底例外"""
+
+    pass
+
+
+class ResourceNotFoundException(DomainException):
+    """リソースが見つからない場合"""
+
+    pass
+
+
+class BusinessRuleViolationException(DomainException):
+    """ビジネスルールに違反した場合"""
+
+    pass
+
+
+class DuplicateResourceException(DomainException):
+    """リソースの重複エラー（条件付き書き込みの失敗時）"""
+
+    pass
+```
+
+`shared/domain/__init__.py` の更新も忘れずに行います：
+
+```python
+from .exception import (
+    DomainException,
+    ResourceNotFoundException,
+    BusinessRuleViolationException,
+    DuplicateResourceException,  # 追加
+)
 ```
 
 ### 3.8 Application Layer: 予約ユースケース
