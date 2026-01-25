@@ -7,23 +7,19 @@ from services.shared.domain import Repository, TripId
 
 
 class BookingRepository(Repository[Booking, BookingId]):
-    """フライト予約リポジトリのインターフェース
-
-    Domain 層で定義し、具象実装は Infrastructure 層で行う。
-    これにより、Domain はインフラ（DynamoDB 等）に依存しない。
-    """
+    """フライト予約レポジトリ"""
 
     @abstractmethod
     def save(self, booking: Booking) -> None:
-        """予約を保存する"""
+        """永続化する"""
         raise NotImplementedError
 
     @abstractmethod
     def find_by_id(self, booking_id: BookingId) -> Optional[Booking]:
-        """予約IDで検索する"""
+        """予約IDで検索"""
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, trip_id: TripId) -> Optional[Booking]:
-        """Trip ID で検索する（1 Trip = 1 Flight の前提）"""
+    def find_by_trip_id(self, tripId: TripId) -> Optional[Booking]:
+        """TripIDで検索"""
         raise NotImplementedError
