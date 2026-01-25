@@ -2,13 +2,13 @@ from decimal import Decimal
 from typing import TypedDict
 
 from services.flight.domain.entity import Booking
-from services.flight.domain.enum import BookingStatus
 from services.flight.domain.value_object import BookingId, FlightNumber
-from services.shared.domain import Currency, IsoDateTime, Money, TripId
+from services.shared.domain import IsoDateTime, Money, TripId
+from services.shared.domain.value_object.currency import Currency
 
 
 class FlightDetails(TypedDict):
-    """フライト詳細の入力データ構造"""
+    """フライトの入力データ構造（TypeDict）"""
 
     flight_number: str
     departure_time: str
@@ -18,27 +18,13 @@ class FlightDetails(TypedDict):
 
 
 class BookingFactory:
-    """フライト予約エンティティのファクトリ
-
-    - 冪等性を担保する ID 生成
-    - プリミティブ型から Value Object への変換
-    - 初期状態の設定
-    """
+    """フライト予約Entityを生成するFactory"""
 
     def create(self, trip_id: TripId, flight_details: FlightDetails) -> Booking:
-        """新規予約エンティティを生成する
+        """新規予約Entityを作成する"""
 
-        Args:
-            trip_id: 旅行ID（Value Object）
-            flight_details: フライト詳細情報
-
-        Returns:
-            Booking: 生成された予約エンティティ（PENDING状態）
-        """
-        # 冪等性担保: 同じ TripId からは常に同じ BookingId を生成
         booking_id = BookingId.from_trip_id(trip_id)
 
-        # プリミティブ型から Value Object に変換
         flight_number = FlightNumber(flight_details["flight_number"])
         departure_time = IsoDateTime.from_string(flight_details["departure_time"])
         arrival_time = IsoDateTime.from_string(flight_details["arrival_time"])
@@ -54,5 +40,4 @@ class BookingFactory:
             departure_time=departure_time,
             arrival_time=arrival_time,
             price=price,
-            status=BookingStatus.PENDING,
         )
