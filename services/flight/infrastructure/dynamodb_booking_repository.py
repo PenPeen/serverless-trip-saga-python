@@ -3,12 +3,14 @@ from decimal import Decimal
 from typing import Optional
 
 import boto3
+from botocore.exceptions import ClientError
 
 from services.flight.domain.entity.booking import Booking
 from services.flight.domain.enum import BookingStatus
 from services.flight.domain.repository import BookingRepository
 from services.flight.domain.value_object import BookingId, FlightNumber
 from services.shared.domain import Currency, IsoDateTime, Money, TripId
+from services.shared.domain.exception.exceptions import DuplicateResourceException
 
 
 class DynamoDBBookingRepository(BookingRepository):
@@ -35,7 +37,15 @@ class DynamoDBBookingRepository(BookingRepository):
             "price_currency": str(booking.price.currency),
             "status": booking.status.value,
         }
-        self.table.put_item(Item=item)
+        try:
+            self.table.put_item(
+                Item=item, ConditionExpression="attribute_not_exists(PK)"
+            )
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise DuplicateResourceException(
+                    f"Booking already exists: {booking.id}"
+                )
 
     def find_by_id(self, booking_id: BookingId) -> Optional[Booking]:
         """予約IDで検索"""
