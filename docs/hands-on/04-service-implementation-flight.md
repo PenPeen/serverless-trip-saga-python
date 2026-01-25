@@ -883,20 +883,23 @@ class ReserveFlightRequest(BaseModel):
 
 `services/flight/handlers/reserve.py`
 
+Handler 層では責務ごとにメソッドを分割し、`lambda_handler` をシンプルに保ちます。
+
 ```python
-from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
 from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
+from services.flight.domain.entity import Booking
+from services.flight.domain.factory import FlightDetails
 from services.flight.infrastructure.dynamodb_booking_repository import DynamoDBBookingRepository
 from services.flight.domain.factory import BookingFactory
 from services.flight.handlers.request_models import ReserveFlightRequest
 
 logger = Logger()
-tracer = Tracer()
 
 # =============================================================================
 # 依存関係の組み立て（Composition Root）
@@ -907,72 +910,83 @@ factory = BookingFactory()
 service = ReserveFlightService(repository=repository, factory=factory)
 
 
+# =============================================================================
+# ヘルパー関数
+# =============================================================================
+def _validate_request(event: dict) -> ReserveFlightRequest:
+    """入力バリデーション（Pydantic）"""
+    return ReserveFlightRequest.model_validate(event)
+
+
+def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
+    """リクエストから FlightDetails 辞書を構築"""
+    return {
+        "flight_number": request.flight_details.flight_number,
+        "departure_time": request.flight_details.departure_time,
+        "arrival_time": request.flight_details.arrival_time,
+        "price_amount": request.flight_details.price_amount,
+        "price_currency": request.flight_details.price_currency,
+    }
+
+
+def _to_response(booking: Booking) -> dict:
+    """Entity をレスポンス形式に変換"""
+    return {
+        "status": "success",
+        "data": {
+            "booking_id": str(booking.id),
+            "trip_id": str(booking.trip_id),
+            "flight_number": str(booking.flight_number),
+            "departure_time": str(booking.departure_time),
+            "arrival_time": str(booking.arrival_time),
+            "price_amount": str(booking.price.amount),
+            "price_currency": str(booking.price.currency),
+            "status": booking.status.value,
+        },
+    }
+
+
+def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
+    """エラーレスポンスを生成"""
+    response = {
+        "status": "error",
+        "error_code": error_code,
+        "message": message,
+    }
+    if details is not None:
+        response["details"] = details
+    return response
+
+
+# =============================================================================
+# Lambda エントリーポイント
+# =============================================================================
 @logger.inject_lambda_context
-@tracer.capture_lambda_handler
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """フライト予約 Lambda ハンドラ
 
-    Step Functions または API Gateway からの入力を受け取り、
+    Step Functions からの入力を受け取り、
     Pydantic でバリデーション後、フライト予約処理を実行する。
     """
     logger.info("Received reserve flight request", extra={"event": event})
 
-    # =========================================================================
-    # 1. 入力バリデーション（Pydantic）
-    # =========================================================================
+    # 1. 入力バリデーション
     try:
-        request = ReserveFlightRequest.model_validate(event)
+        request = _validate_request(event)
     except ValidationError as e:
         logger.warning("Validation failed", extra={"errors": e.errors()})
-        return {
-            "status": "error",
-            "error_code": "VALIDATION_ERROR",
-            "message": "入力データが不正です",
-            "details": e.errors(),
-        }
+        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
 
-    # =========================================================================
     # 2. Application Service 呼び出し
-    # =========================================================================
     try:
-        # プリミティブ型から Value Object に変換
         trip_id = TripId(value=request.trip_id)
-
-        # FlightDetails 辞書を構築
-        flight_details = {
-            "flight_number": request.flight_details.flight_number,
-            "departure_time": request.flight_details.departure_time,
-            "arrival_time": request.flight_details.arrival_time,
-            "price_amount": request.flight_details.price_amount,
-            "price_currency": request.flight_details.price_currency,
-        }
-
+        flight_details = _to_flight_details(request)
         booking = service.reserve(trip_id, flight_details)
-
-        # =====================================================================
-        # Handler層の責務: Entity をレスポンス形式に変換
-        # =====================================================================
-        return {
-            "status": "success",
-            "data": {
-                "booking_id": str(booking.id),
-                "trip_id": str(booking.trip_id),
-                "flight_number": str(booking.flight_number),
-                "departure_time": str(booking.departure_time),
-                "arrival_time": str(booking.arrival_time),
-                "price_amount": str(booking.price.amount),
-                "price_currency": str(booking.price.currency),
-                "status": booking.status.value,
-            },
-        }
+        return _to_response(booking)
 
     except Exception as e:
         logger.exception("Failed to reserve flight")
-        return {
-            "status": "error",
-            "error_code": "INTERNAL_ERROR",
-            "message": str(e),
-        }
+        return _error_response("INTERNAL_ERROR", str(e))
 ```
 
 ### 3.11 バリデーションエラーのレスポンス例
