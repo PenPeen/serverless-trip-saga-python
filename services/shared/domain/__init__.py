@@ -2,6 +2,7 @@ from .entity import AggregateRoot, Entity
 from .exception import (
     BusinessRuleViolationException,
     DomainException,
+    DuplicateResourceException,
     ResourceNotFoundException,
 )
 from .repository import Repository
@@ -14,6 +15,7 @@ __all__ = [
     "DomainException",
     "ResourceNotFoundException",
     "BusinessRuleViolationException",
+    "DuplicateResourceException",
     "TripId",
     "Currency",
     "Money",
