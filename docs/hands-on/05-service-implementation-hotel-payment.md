@@ -471,7 +471,7 @@ class CancelHotelRequest(BaseModel):
 `services/hotel/handlers/reserve.py`
 
 ```python
-from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
@@ -485,7 +485,6 @@ from services.hotel.domain.hotel_booking_factory import HotelBookingFactory
 from services.hotel.handlers.request_models import ReserveHotelRequest
 
 logger = Logger()
-tracer = Tracer()
 
 # 依存関係の組み立て（Composition Root）
 repository = DynamoDBHotelBookingRepository()
@@ -494,7 +493,6 @@ service = ReserveHotelService(repository=repository, factory=factory)
 
 
 @logger.inject_lambda_context
-@tracer.capture_lambda_handler
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """ホテル予約 Lambda ハンドラ"""
     logger.info("Received reserve hotel request", extra={"event": event})
@@ -831,7 +829,7 @@ class RefundPaymentRequest(BaseModel):
 `services/payment/handlers/process.py`
 
 ```python
-from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import ValidationError
 
@@ -845,7 +843,6 @@ from services.payment.domain.payment_factory import PaymentFactory
 from services.payment.handlers.request_models import ProcessPaymentRequest
 
 logger = Logger()
-tracer = Tracer()
 
 # 依存関係の組み立て（Composition Root）
 repository = DynamoDBPaymentRepository()
@@ -854,7 +851,6 @@ service = ProcessPaymentService(repository=repository, factory=factory)
 
 
 @logger.inject_lambda_context
-@tracer.capture_lambda_handler
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """決済処理 Lambda ハンドラ"""
     logger.info("Received process payment request", extra={"event": event})
