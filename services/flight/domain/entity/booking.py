@@ -1,10 +1,10 @@
 from services.flight.domain.enum import BookingStatus
 from services.flight.domain.value_object import BookingId, FlightNumber
-from services.shared.domain import Entity, IsoDateTime, Money, TripId
+from services.shared.domain import AggregateRoot, IsoDateTime, Money, TripId
 from services.shared.domain.exception import BusinessRuleViolationException
 
 
-class Booking(Entity[BookingId]):
+class Booking(AggregateRoot[BookingId]):
     """フライト予約"""
 
     def __init__(
