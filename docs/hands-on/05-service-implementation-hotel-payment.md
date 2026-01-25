@@ -470,14 +470,17 @@ class CancelHotelRequest(BaseModel):
 
 `services/hotel/handlers/reserve.py`
 
+Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、入出力を統一します。
+
 ```python
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from services.shared.domain import TripId
 
 from services.hotel.applications.reserve_hotel import ReserveHotelService
+from services.hotel.domain.hotel_booking import HotelBooking
 from services.hotel.infrastructure.dynamodb_hotel_booking_repository import (
     DynamoDBHotelBookingRepository,
 )
@@ -486,12 +489,82 @@ from services.hotel.handlers.request_models import ReserveHotelRequest
 
 logger = Logger()
 
+
+# =============================================================================
+# レスポンスモデル（Pydantic）
+# =============================================================================
+class HotelBookingData(BaseModel):
+    """ホテル予約データのレスポンスモデル"""
+
+    booking_id: str
+    trip_id: str
+    hotel_name: str
+    check_in_date: str
+    check_out_date: str
+    nights: int
+    price_amount: str
+    price_currency: str
+    status: str
+
+
+class SuccessResponse(BaseModel):
+    """成功レスポンスモデル"""
+
+    status: str = "success"
+    data: HotelBookingData
+
+
+class ErrorResponse(BaseModel):
+    """エラーレスポンスモデル"""
+
+    status: str = "error"
+    error_code: str
+    message: str
+    details: list | None = None
+
+
+# =============================================================================
 # 依存関係の組み立て（Composition Root）
+# =============================================================================
 repository = DynamoDBHotelBookingRepository()
 factory = HotelBookingFactory()
 service = ReserveHotelService(repository=repository, factory=factory)
 
 
+# =============================================================================
+# ヘルパー関数
+# =============================================================================
+def _to_response(booking: HotelBooking) -> dict:
+    """Entity をレスポンス形式に変換"""
+    return SuccessResponse(
+        data=HotelBookingData(
+            booking_id=str(booking.id),
+            trip_id=str(booking.trip_id),
+            hotel_name=str(booking.hotel_name),
+            check_in_date=booking.stay_period.check_in,
+            check_out_date=booking.stay_period.check_out,
+            nights=booking.stay_period.nights(),
+            price_amount=str(booking.price.amount),
+            price_currency=str(booking.price.currency),
+            status=booking.status.value,
+        )
+    ).model_dump()
+
+
+def _error_response(
+    error_code: str, message: str, details: list | None = None
+) -> dict:
+    """エラーレスポンスを生成"""
+    return ErrorResponse(
+        error_code=error_code,
+        message=message,
+        details=details,
+    ).model_dump(exclude_none=True)
+
+
+# =============================================================================
+# Lambda エントリーポイント
+# =============================================================================
 @logger.inject_lambda_context
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """ホテル予約 Lambda ハンドラ"""
@@ -502,12 +575,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         request = ReserveHotelRequest.model_validate(event)
     except ValidationError as e:
         logger.warning("Validation failed", extra={"errors": e.errors()})
-        return {
-            "status": "error",
-            "error_code": "VALIDATION_ERROR",
-            "message": "入力データが不正です",
-            "details": e.errors(),
-        }
+        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
 
     # Application Service 呼び出し
     try:
@@ -520,26 +588,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             "price_currency": request.hotel_details.price_currency,
         }
         booking = service.reserve(trip_id, hotel_details)
-
-        # Handler層の責務: Entity をレスポンス形式に変換
-        return {
-            "status": "success",
-            "data": {
-                "booking_id": str(booking.id),
-                "trip_id": str(booking.trip_id),
-                "hotel_name": str(booking.hotel_name),
-                "check_in_date": booking.stay_period.check_in,
-                "check_out_date": booking.stay_period.check_out,
-                "nights": booking.stay_period.nights(),
-                "price_amount": str(booking.price.amount),
-                "price_currency": str(booking.price.currency),
-                "status": booking.status.value,
-            },
-        }
+        return _to_response(booking)
 
     except Exception as e:
         logger.exception("Failed to reserve hotel")
-        return {"status": "error", "error_code": "INTERNAL_ERROR", "message": str(e)}
+        return _error_response("INTERNAL_ERROR", str(e))
 ```
 
 ## 5. Payment Service の実装
@@ -828,14 +881,17 @@ class RefundPaymentRequest(BaseModel):
 
 `services/payment/handlers/process.py`
 
+Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、入出力を統一します。
+
 ```python
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from services.shared.domain import TripId
 
 from services.payment.applications.process_payment import ProcessPaymentService
+from services.payment.domain.payment import Payment
 from services.payment.infrastructure.dynamodb_payment_repository import (
     DynamoDBPaymentRepository,
 )
@@ -844,12 +900,74 @@ from services.payment.handlers.request_models import ProcessPaymentRequest
 
 logger = Logger()
 
+
+# =============================================================================
+# レスポンスモデル（Pydantic）
+# =============================================================================
+class PaymentData(BaseModel):
+    """決済データのレスポンスモデル"""
+
+    payment_id: str
+    trip_id: str
+    amount: str
+    currency: str
+    status: str
+
+
+class SuccessResponse(BaseModel):
+    """成功レスポンスモデル"""
+
+    status: str = "success"
+    data: PaymentData
+
+
+class ErrorResponse(BaseModel):
+    """エラーレスポンスモデル"""
+
+    status: str = "error"
+    error_code: str
+    message: str
+    details: list | None = None
+
+
+# =============================================================================
 # 依存関係の組み立て（Composition Root）
+# =============================================================================
 repository = DynamoDBPaymentRepository()
 factory = PaymentFactory()
 service = ProcessPaymentService(repository=repository, factory=factory)
 
 
+# =============================================================================
+# ヘルパー関数
+# =============================================================================
+def _to_response(payment: Payment) -> dict:
+    """Entity をレスポンス形式に変換"""
+    return SuccessResponse(
+        data=PaymentData(
+            payment_id=str(payment.id),
+            trip_id=str(payment.trip_id),
+            amount=str(payment.amount.amount),
+            currency=str(payment.amount.currency),
+            status=payment.status.value,
+        )
+    ).model_dump()
+
+
+def _error_response(
+    error_code: str, message: str, details: list | None = None
+) -> dict:
+    """エラーレスポンスを生成"""
+    return ErrorResponse(
+        error_code=error_code,
+        message=message,
+        details=details,
+    ).model_dump(exclude_none=True)
+
+
+# =============================================================================
+# Lambda エントリーポイント
+# =============================================================================
 @logger.inject_lambda_context
 def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """決済処理 Lambda ハンドラ"""
@@ -860,12 +978,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
         request = ProcessPaymentRequest.model_validate(event)
     except ValidationError as e:
         logger.warning("Validation failed", extra={"errors": e.errors()})
-        return {
-            "status": "error",
-            "error_code": "VALIDATION_ERROR",
-            "message": "入力データが不正です",
-            "details": e.errors(),
-        }
+        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
 
     # Application Service 呼び出し
     try:
@@ -875,22 +988,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
             amount=request.amount,
             currency_code=request.currency,
         )
-
-        # Handler層の責務: Entity をレスポンス形式に変換
-        return {
-            "status": "success",
-            "data": {
-                "payment_id": str(payment.id),
-                "trip_id": str(payment.trip_id),
-                "amount": str(payment.amount.amount),
-                "currency": str(payment.amount.currency),
-                "status": payment.status.value,
-            },
-        }
+        return _to_response(payment)
 
     except Exception as e:
         logger.exception("Failed to process payment")
-        return {"status": "error", "error_code": "INTERNAL_ERROR", "message": str(e)}
+        return _error_response("INTERNAL_ERROR", str(e))
 ```
 
 ## 6. CDK Construct への定義追加

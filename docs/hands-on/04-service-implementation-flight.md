@@ -888,7 +888,7 @@ Handler 層では責務ごとにメソッドを分割し、`lambda_handler` を�
 ```python
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from services.shared.domain import TripId
 
@@ -900,6 +900,39 @@ from services.flight.domain.factory import BookingFactory
 from services.flight.handlers.request_models import ReserveFlightRequest
 
 logger = Logger()
+
+
+# =============================================================================
+# レスポンスモデル（Pydantic）
+# =============================================================================
+class BookingData(BaseModel):
+    """予約データのレスポンスモデル"""
+
+    booking_id: str
+    trip_id: str
+    flight_number: str
+    departure_time: str
+    arrival_time: str
+    price_amount: str
+    price_currency: str
+    status: str
+
+
+class SuccessResponse(BaseModel):
+    """成功レスポンスモデル"""
+
+    status: str = "success"
+    data: BookingData
+
+
+class ErrorResponse(BaseModel):
+    """エラーレスポンスモデル"""
+
+    status: str = "error"
+    error_code: str
+    message: str
+    details: list | None = None
+
 
 # =============================================================================
 # 依存関係の組み立て（Composition Root）
@@ -931,31 +964,29 @@ def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
 
 def _to_response(booking: Booking) -> dict:
     """Entity をレスポンス形式に変換"""
-    return {
-        "status": "success",
-        "data": {
-            "booking_id": str(booking.id),
-            "trip_id": str(booking.trip_id),
-            "flight_number": str(booking.flight_number),
-            "departure_time": str(booking.departure_time),
-            "arrival_time": str(booking.arrival_time),
-            "price_amount": str(booking.price.amount),
-            "price_currency": str(booking.price.currency),
-            "status": booking.status.value,
-        },
-    }
+    return SuccessResponse(
+        data=BookingData(
+            booking_id=str(booking.id),
+            trip_id=str(booking.trip_id),
+            flight_number=str(booking.flight_number),
+            departure_time=str(booking.departure_time),
+            arrival_time=str(booking.arrival_time),
+            price_amount=str(booking.price.amount),
+            price_currency=str(booking.price.currency),
+            status=booking.status.value,
+        )
+    ).model_dump()
 
 
-def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
+def _error_response(
+    error_code: str, message: str, details: list | None = None
+) -> dict:
     """エラーレスポンスを生成"""
-    response = {
-        "status": "error",
-        "error_code": error_code,
-        "message": message,
-    }
-    if details is not None:
-        response["details"] = details
-    return response
+    return ErrorResponse(
+        error_code=error_code,
+        message=message,
+        details=details,
+    ).model_dump(exclude_none=True)
 
 
 # =============================================================================
