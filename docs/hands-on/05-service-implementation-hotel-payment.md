@@ -45,7 +45,7 @@ Hands-on 04 の Flight Service と同じパターンで実装します。
 
 ### 4.1 ディレクトリ構造
 
-Value Object と Entity はファイルを分けて配置します。
+Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
 
 ```
 services/hotel/
@@ -61,15 +61,23 @@ services/hotel/
 │   └── cancel_hotel.py          # キャンセルユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── hotel_booking_id.py      # HotelBookingId（Value Object）
-│   ├── hotel_name.py            # HotelName（Value Object）
-│   ├── stay_period.py           # StayPeriod（Value Object）
-│   ├── hotel_booking.py         # HotelBooking（Entity）
-│   ├── hotel_booking_factory.py # Factory
-│   ├── hotel_booking_repository.py  # Repository インターフェース
-│   └── enum/
+│   ├── entity/
+│   │   ├── __init__.py
+│   │   └── hotel_booking.py     # HotelBooking（Entity）
+│   ├── value_object/
+│   │   ├── __init__.py
+│   │   ├── hotel_booking_id.py  # HotelBookingId（Value Object）
+│   │   ├── hotel_name.py        # HotelName（Value Object）
+│   │   └── stay_period.py       # StayPeriod（Value Object）
+│   ├── enum/
+│   │   ├── __init__.py
+│   │   └── hotel_booking_status.py  # HotelBookingStatus（Enum）
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── hotel_booking_repository.py  # Repository インターフェース
+│   └── factory/
 │       ├── __init__.py
-│       └── hotel_booking_status.py  # HotelBookingStatus（Enum）
+│       └── hotel_booking_factory.py     # Factory
 └── infrastructure/
     ├── __init__.py
     └── dynamodb_hotel_booking_repository.py  # Repository 実装
@@ -77,7 +85,7 @@ services/hotel/
 
 ### 4.2 Hotel 固有の Value Object
 
-#### HotelBookingId（`services/hotel/domain/hotel_booking_id.py`）
+#### HotelBookingId（`services/hotel/domain/value_object/hotel_booking_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -107,6 +115,8 @@ class HotelBookingId:
 
 #### HotelBookingStatus（`services/hotel/domain/enum/hotel_booking_status.py`）
 
+> **Note:** enum は既にサブディレクトリで配置されています。
+
 ```python
 from enum import Enum
 
@@ -118,7 +128,7 @@ class HotelBookingStatus(str, Enum):
     CANCELLED = "CANCELLED"
 ```
 
-#### HotelName（`services/hotel/domain/hotel_name.py`）
+#### HotelName（`services/hotel/domain/value_object/hotel_name.py`）
 
 ```python
 from dataclasses import dataclass
@@ -142,7 +152,7 @@ class HotelName:
         return self.value
 ```
 
-#### StayPeriod（`services/hotel/domain/stay_period.py`）
+#### StayPeriod（`services/hotel/domain/value_object/stay_period.py`）
 
 ```python
 from dataclasses import dataclass
@@ -180,16 +190,14 @@ class StayPeriod:
 
 ### 4.3 Domain Layer: HotelBooking AggregateRoot
 
-`services/hotel/domain/hotel_booking.py`
+`services/hotel/domain/entity/hotel_booking.py`
 
 ```python
 from services.shared.domain import AggregateRoot, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
-from services.hotel.domain.hotel_booking_id import HotelBookingId
+from services.hotel.domain.value_object import HotelBookingId, HotelName, StayPeriod
 from services.hotel.domain.enum import HotelBookingStatus
-from services.hotel.domain.hotel_name import HotelName
-from services.hotel.domain.stay_period import StayPeriod
 
 
 class HotelBooking(AggregateRoot[HotelBookingId]):
@@ -254,24 +262,27 @@ class HotelBooking(AggregateRoot[HotelBookingId]):
 ### 4.4 Domain Layer: hotel/domain/__init__.py
 
 ```python
-from .hotel_booking_id import HotelBookingId
+from .entity import HotelBooking
 from .enum import HotelBookingStatus
-from .hotel_name import HotelName
-from .stay_period import StayPeriod
-from .hotel_booking import HotelBooking
+from .factory import HotelBookingFactory, HotelDetails
+from .repository import HotelBookingRepository
+from .value_object import HotelBookingId, HotelName, StayPeriod
 
 __all__ = [
+    "HotelBooking",
     "HotelBookingId",
     "HotelBookingStatus",
     "HotelName",
     "StayPeriod",
-    "HotelBooking",
+    "HotelBookingRepository",
+    "HotelBookingFactory",
+    "HotelDetails",
 ]
 ```
 
 ### 4.5 Domain Layer: Factory
 
-`services/hotel/domain/hotel_booking_factory.py`
+`services/hotel/domain/factory/hotel_booking_factory.py`
 
 ```python
 from decimal import Decimal
@@ -279,11 +290,9 @@ from typing import TypedDict
 
 from services.shared.domain import TripId, Money, Currency
 
-from services.hotel.domain.hotel_booking import HotelBooking
-from services.hotel.domain.hotel_booking_id import HotelBookingId
+from services.hotel.domain.entity import HotelBooking
+from services.hotel.domain.value_object import HotelBookingId, HotelName, StayPeriod
 from services.hotel.domain.enum import HotelBookingStatus
-from services.hotel.domain.hotel_name import HotelName
-from services.hotel.domain.stay_period import StayPeriod
 
 
 class HotelDetails(TypedDict):
@@ -330,7 +339,7 @@ class HotelBookingFactory:
 
 ### 4.6 Domain Layer: Repository インターフェース
 
-`services/hotel/domain/hotel_booking_repository.py`
+`services/hotel/domain/repository/hotel_booking_repository.py`
 
 ```python
 from abc import abstractmethod
@@ -338,8 +347,8 @@ from typing import Optional
 
 from services.shared.domain import Repository, TripId
 
-from services.hotel.domain.hotel_booking_id import HotelBookingId
-from services.hotel.domain.hotel_booking import HotelBooking
+from services.hotel.domain.value_object import HotelBookingId
+from services.hotel.domain.entity import HotelBooking
 
 
 class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
@@ -368,9 +377,9 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
 ```python
 from services.shared.domain import TripId
 
-from services.hotel.domain.hotel_booking import HotelBooking
-from services.hotel.domain.hotel_booking_factory import HotelBookingFactory, HotelDetails
-from services.hotel.domain.hotel_booking_repository import HotelBookingRepository
+from services.hotel.domain.entity import HotelBooking
+from services.hotel.domain.factory import HotelBookingFactory, HotelDetails
+from services.hotel.domain.repository import HotelBookingRepository
 
 
 class ReserveHotelService:
@@ -480,11 +489,11 @@ from pydantic import BaseModel, ValidationError
 from services.shared.domain import TripId
 
 from services.hotel.applications.reserve_hotel import ReserveHotelService
-from services.hotel.domain.hotel_booking import HotelBooking
+from services.hotel.domain.entity import HotelBooking
 from services.hotel.infrastructure.dynamodb_hotel_booking_repository import (
     DynamoDBHotelBookingRepository,
 )
-from services.hotel.domain.hotel_booking_factory import HotelBookingFactory
+from services.hotel.domain.factory import HotelBookingFactory
 from services.hotel.handlers.request_models import ReserveHotelRequest
 
 logger = Logger()
@@ -601,6 +610,8 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
 
 ### 5.1 ディレクトリ構造
 
+Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
+
 ```
 services/payment/
 ├── __init__.py
@@ -615,13 +626,21 @@ services/payment/
 │   └── refund_payment.py        # 払い戻しユースケース
 ├── domain/
 │   ├── __init__.py
-│   ├── payment_id.py            # PaymentId（Value Object）
-│   ├── payment.py               # Payment（Entity）
-│   ├── payment_factory.py       # Factory
-│   ├── payment_repository.py    # Repository インターフェース
-│   └── enum/
+│   ├── entity/
+│   │   ├── __init__.py
+│   │   └── payment.py           # Payment（Entity）
+│   ├── value_object/
+│   │   ├── __init__.py
+│   │   └── payment_id.py        # PaymentId（Value Object）
+│   ├── enum/
+│   │   ├── __init__.py
+│   │   └── payment_status.py    # PaymentStatus（Enum）
+│   ├── repository/
+│   │   ├── __init__.py
+│   │   └── payment_repository.py    # Repository インターフェース
+│   └── factory/
 │       ├── __init__.py
-│       └── payment_status.py    # PaymentStatus（Enum）
+│       └── payment_factory.py       # Factory
 └── infrastructure/
     ├── __init__.py
     └── dynamodb_payment_repository.py  # Repository 実装
@@ -629,7 +648,7 @@ services/payment/
 
 ### 5.2 Payment 固有の Value Object
 
-#### PaymentId（`services/payment/domain/payment_id.py`）
+#### PaymentId（`services/payment/domain/value_object/payment_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -670,13 +689,13 @@ class PaymentStatus(str, Enum):
 
 ### 5.3 Domain Layer: Payment AggregateRoot
 
-`services/payment/domain/payment.py`
+`services/payment/domain/entity/payment.py`
 
 ```python
 from services.shared.domain import AggregateRoot, TripId, Money
 from services.shared.domain.exceptions import BusinessRuleViolationException
 
-from services.payment.domain.payment_id import PaymentId
+from services.payment.domain.value_object import PaymentId
 from services.payment.domain.enum import PaymentStatus
 
 
@@ -733,28 +752,32 @@ class Payment(AggregateRoot[PaymentId]):
 ### 5.4 Domain Layer: payment/domain/__init__.py
 
 ```python
-from .payment_id import PaymentId
+from .entity import Payment
 from .enum import PaymentStatus
-from .payment import Payment
+from .factory import PaymentFactory
+from .repository import PaymentRepository
+from .value_object import PaymentId
 
 __all__ = [
+    "Payment",
     "PaymentId",
     "PaymentStatus",
-    "Payment",
+    "PaymentRepository",
+    "PaymentFactory",
 ]
 ```
 
 ### 5.5 Domain Layer: Factory
 
-`services/payment/domain/payment_factory.py`
+`services/payment/domain/factory/payment_factory.py`
 
 ```python
 from decimal import Decimal
 
 from services.shared.domain import TripId, Money, Currency
 
-from services.payment.domain.payment import Payment
-from services.payment.domain.payment_id import PaymentId
+from services.payment.domain.entity import Payment
+from services.payment.domain.value_object import PaymentId
 from services.payment.domain.enum import PaymentStatus
 
 
@@ -795,9 +818,9 @@ from decimal import Decimal
 
 from services.shared.domain import TripId
 
-from services.payment.domain.payment import Payment
-from services.payment.domain.payment_factory import PaymentFactory
-from services.payment.domain.payment_repository import PaymentRepository
+from services.payment.domain.entity import Payment
+from services.payment.domain.factory import PaymentFactory
+from services.payment.domain.repository import PaymentRepository
 
 
 class ProcessPaymentService:
@@ -891,11 +914,11 @@ from pydantic import BaseModel, ValidationError
 from services.shared.domain import TripId
 
 from services.payment.applications.process_payment import ProcessPaymentService
-from services.payment.domain.payment import Payment
+from services.payment.domain.entity import Payment
 from services.payment.infrastructure.dynamodb_payment_repository import (
     DynamoDBPaymentRepository,
 )
-from services.payment.domain.payment_factory import PaymentFactory
+from services.payment.domain.factory import PaymentFactory
 from services.payment.handlers.request_models import ProcessPaymentRequest
 
 logger = Logger()
@@ -1117,26 +1140,40 @@ class Functions(Construct):
 
 ### テストファイル構造
 
+Value Object と Entity を分離したことで、テストも細かく分割できます。
+
 ```
 tests/unit/services/
 ├── shared/
 │   └── domain/
-│       ├── test_trip_id.py
-│       ├── test_money.py
-│       ├── test_currency.py
-│       └── test_date_time.py
+│       └── value_object/
+│           ├── __init__.py
+│           ├── test_trip_id.py
+│           ├── test_money.py
+│           ├── test_currency.py
+│           └── test_iso_date_time.py
 ├── hotel/
+│   ├── __init__.py
 │   ├── domain/
-│   │   ├── test_hotel_booking_id.py
-│   │   ├── test_hotel_name.py
-│   │   ├── test_stay_period.py
-│   │   └── test_hotel_booking.py
+│   │   ├── entity/
+│   │   │   ├── __init__.py
+│   │   │   └── test_hotel_booking.py
+│   │   └── value_object/
+│   │       ├── __init__.py
+│   │       ├── test_hotel_booking_id.py
+│   │       ├── test_hotel_name.py
+│   │       └── test_stay_period.py
 │   ├── test_hotel_booking_factory.py
 │   └── test_reserve_hotel.py
 └── payment/
+    ├── __init__.py
     ├── domain/
-    │   ├── test_payment_id.py
-    │   └── test_payment.py
+    │   ├── entity/
+    │   │   ├── __init__.py
+    │   │   └── test_payment.py
+    │   └── value_object/
+    │       ├── __init__.py
+    │       └── test_payment_id.py
     ├── test_payment_factory.py
     └── test_process_payment.py
 ```
