@@ -210,6 +210,27 @@ Lambda関数の更新において、**CodeDeployを使用した段階的デプ�
     *   `aws-lambda-powertools`, `pydantic`, `datadog-lambda` などの頻繁に変更されない重量級ライブラリをLayerに分離。
     *   各Lambda関数のコード修正時には、アプリケーションコードのみをデプロイすれば良いため、デプロイメントパイプラインが高速化します。
 
+### 2.6. Authorization: 学習スコープ外として省略
+
+本ハンズオンでは、認証・認可機構の実装を意図的に省略しています。
+
+*   **コンテキスト:**
+    *   本プロジェクトは Saga Pattern、DDD、サーバーレスアーキテクチャの学習を主目的としています。
+    *   認証・認可は重要なセキュリティ要件ですが、学習スコープを明確にするため本ハンズオンでは対象外とします。
+
+*   **現状の動作:**
+    *   `trip_id` を知っていれば、誰でもそのリソースにアクセス可能です。
+    *   API Gateway Authorizer、Lambda Handler、DynamoDB レベルでの認可チェックは実装されていません。
+    *   ユーザー認証（JWT、Cognito等）も未実装です。
+
+*   **本番環境への移行時の考慮事項:**
+    1.  **認証の追加:** AWS Cognito または外部 OIDC プロバイダーとの統合
+    2.  **API Gateway Authorizer:** Lambda Authorizer で JWT/Cognito トークンを検証し、コンテキストに `user_id` を埋め込む
+    3.  **DynamoDB スキーマ変更:** `user_id` 属性を追加し、リクエストの `trip_id` がそのユーザーの所有物かを検証
+    4.  **IAM ポリシー:** 最小権限の原則に基づくきめ細かいアクセス制御
+
+*   **ステータス:** 承認済み（学習用途として意図的に省略）
+
 ---
 
 ## 3. Project Setup Guide (Hands-on Preparation)
