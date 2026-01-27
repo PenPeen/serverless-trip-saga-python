@@ -1,4 +1,0 @@
-pytest==8.4.2
-ruff
-boto3
-boto3-stubs[dynamodb]
