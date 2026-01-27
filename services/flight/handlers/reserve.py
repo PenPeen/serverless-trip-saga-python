@@ -57,7 +57,8 @@ def lambda_handler(event: ReserveFlightRequest, context: LambdaContext) -> dict:
 
     Step Functions からの入力を受け取り、
     @event_parser デコレータで自動バリデーション後、フライト予約処理を実行する。
-    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
+    バリデーションエラーは ValidationError として raise され、
+    Step Functions でハンドリング可能。
     """
 
     logger.info("Received reserve flight request")
