@@ -483,8 +483,9 @@ Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、�
 
 ```python
 from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from services.shared.domain import TripId
 
@@ -575,26 +576,23 @@ def _error_response(
 # Lambda エントリーポイント
 # =============================================================================
 @logger.inject_lambda_context
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
-    """ホテル予約 Lambda ハンドラ"""
-    logger.info("Received reserve hotel request", extra={"event": event})
+@event_parser(model=ReserveHotelRequest)
+def lambda_handler(event: ReserveHotelRequest, context: LambdaContext) -> dict:
+    """ホテル予約 Lambda ハンドラ
 
-    # 入力バリデーション
-    try:
-        request = ReserveHotelRequest.model_validate(event)
-    except ValidationError as e:
-        logger.warning("Validation failed", extra={"errors": e.errors()})
-        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
+    @event_parser デコレータで自動バリデーション後、ホテル予約処理を実行する。
+    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
+    """
+    logger.info("Received reserve hotel request")
 
-    # Application Service 呼び出し
     try:
-        trip_id = TripId(value=request.trip_id)
+        trip_id = TripId(value=event.trip_id)
         hotel_details = {
-            "hotel_name": request.hotel_details.hotel_name,
-            "check_in_date": request.hotel_details.check_in_date,
-            "check_out_date": request.hotel_details.check_out_date,
-            "price_amount": request.hotel_details.price_amount,
-            "price_currency": request.hotel_details.price_currency,
+            "hotel_name": event.hotel_details.hotel_name,
+            "check_in_date": event.hotel_details.check_in_date,
+            "check_out_date": event.hotel_details.check_out_date,
+            "price_amount": event.hotel_details.price_amount,
+            "price_currency": event.hotel_details.price_currency,
         }
         booking = service.reserve(trip_id, hotel_details)
         return _to_response(booking)
@@ -908,8 +906,9 @@ Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、�
 
 ```python
 from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from services.shared.domain import TripId
 
@@ -992,24 +991,21 @@ def _error_response(
 # Lambda エントリーポイント
 # =============================================================================
 @logger.inject_lambda_context
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
-    """決済処理 Lambda ハンドラ"""
-    logger.info("Received process payment request", extra={"event": event})
+@event_parser(model=ProcessPaymentRequest)
+def lambda_handler(event: ProcessPaymentRequest, context: LambdaContext) -> dict:
+    """決済処理 Lambda ハンドラ
 
-    # 入力バリデーション
-    try:
-        request = ProcessPaymentRequest.model_validate(event)
-    except ValidationError as e:
-        logger.warning("Validation failed", extra={"errors": e.errors()})
-        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
+    @event_parser デコレータで自動バリデーション後、決済処理を実行する。
+    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
+    """
+    logger.info("Received process payment request")
 
-    # Application Service 呼び出し
     try:
-        trip_id = TripId(value=request.trip_id)
+        trip_id = TripId(value=event.trip_id)
         payment = service.process(
             trip_id=trip_id,
-            amount=request.amount,
-            currency_code=request.currency,
+            amount=event.amount,
+            currency_code=event.currency,
         )
         return _to_response(payment)
 

@@ -887,8 +887,9 @@ Handler 層では責務ごとにメソッドを分割し、`lambda_handler` を�
 
 ```python
 from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from services.shared.domain import TripId
 
@@ -946,11 +947,6 @@ service = ReserveFlightService(repository=repository, factory=factory)
 # =============================================================================
 # ヘルパー関数
 # =============================================================================
-def _validate_request(event: dict) -> ReserveFlightRequest:
-    """入力バリデーション（Pydantic）"""
-    return ReserveFlightRequest.model_validate(event)
-
-
 def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
     """リクエストから FlightDetails 辞書を構築"""
     return {
@@ -993,25 +989,19 @@ def _error_response(
 # Lambda エントリーポイント
 # =============================================================================
 @logger.inject_lambda_context
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
+@event_parser(model=ReserveFlightRequest)
+def lambda_handler(event: ReserveFlightRequest, context: LambdaContext) -> dict:
     """フライト予約 Lambda ハンドラ
 
     Step Functions からの入力を受け取り、
-    Pydantic でバリデーション後、フライト予約処理を実行する。
+    @event_parser デコレータで自動バリデーション後、フライト予約処理を実行する。
+    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
     """
-    logger.info("Received reserve flight request", extra={"event": event})
+    logger.info("Received reserve flight request")
 
-    # 1. 入力バリデーション
     try:
-        request = _validate_request(event)
-    except ValidationError as e:
-        logger.warning("Validation failed", extra={"errors": e.errors()})
-        return _error_response("VALIDATION_ERROR", "入力データが不正です", e.errors())
-
-    # 2. Application Service 呼び出し
-    try:
-        trip_id = TripId(value=request.trip_id)
-        flight_details = _to_flight_details(request)
+        trip_id = TripId(value=event.trip_id)
+        flight_details = _to_flight_details(event)
         booking = service.reserve(trip_id, flight_details)
         return _to_response(booking)
 
