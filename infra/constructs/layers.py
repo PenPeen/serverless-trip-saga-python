@@ -1,11 +1,13 @@
+import logging
 import subprocess
 from pathlib import Path
 
 import jsii
 from aws_cdk import BundlingOptions, ILocalBundling
 from aws_cdk import aws_lambda as _lambda
-
 from constructs import Construct
+
+logger = logging.getLogger(__name__)
 
 
 @jsii.implements(ILocalBundling)
@@ -31,10 +33,23 @@ class PythonLocalBundling:
         target_dir = Path(output_dir) / "python"
 
         if not requirements_path.exists():
+            logger.warning("requirements.txt not found: %s", requirements_path)
             return False
 
+        # uvを優先し、なければpipを使用
+        if self._try_uv_install(requirements_path, target_dir):
+            return True
+
+        if self._try_pip_install(requirements_path, target_dir):
+            return True
+
+        logger.warning("Local bundling failed, falling back to Docker")
+        return False
+
+    def _try_uv_install(self, requirements_path: Path, target_dir: Path) -> bool:
+        """uvでインストールを試行する。"""
         try:
-            # uvを優先し、なければpipを使用
+            logger.info("Trying local bundling with uv...")
             subprocess.run(
                 [
                     "uv",
@@ -48,25 +63,39 @@ class PythonLocalBundling:
                 ],
                 check=True,
             )
+            logger.info("Local bundling with uv succeeded")
             return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            # uvがない場合はpipにフォールバック
-            try:
-                subprocess.run(
-                    [
-                        "pip",
-                        "install",
-                        "-r",
-                        str(requirements_path),
-                        "-t",
-                        str(target_dir),
-                        "--quiet",
-                    ],
-                    check=True,
-                )
-                return True
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                return False
+        except FileNotFoundError:
+            logger.debug("uv not found, trying pip")
+            return False
+        except subprocess.CalledProcessError as e:
+            logger.debug("uv install failed: %s", e)
+            return False
+
+    def _try_pip_install(self, requirements_path: Path, target_dir: Path) -> bool:
+        """pipでインストールを試行する。"""
+        try:
+            logger.info("Trying local bundling with pip...")
+            subprocess.run(
+                [
+                    "pip",
+                    "install",
+                    "-r",
+                    str(requirements_path),
+                    "-t",
+                    str(target_dir),
+                    "--quiet",
+                ],
+                check=True,
+            )
+            logger.info("Local bundling with pip succeeded")
+            return True
+        except FileNotFoundError:
+            logger.debug("pip not found")
+            return False
+        except subprocess.CalledProcessError as e:
+            logger.debug("pip install failed: %s", e)
+            return False
 
 
 class Layers(Construct):
