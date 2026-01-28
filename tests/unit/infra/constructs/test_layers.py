@@ -2,8 +2,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from infra.constructs.layers import PythonLocalBundling
 
 
