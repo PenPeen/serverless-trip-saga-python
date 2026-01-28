@@ -1097,12 +1097,6 @@ class TestFlightNumber:
         """不正な形式はエラーになる"""
         with pytest.raises(ValueError):
             FlightNumber("INVALID")
-
-    def test_equality(self):
-        """同じ値なら等価"""
-        flight_number_1 = FlightNumber("NH001")
-        flight_number_2 = FlightNumber("NH001")
-        assert flight_number_1 == flight_number_2
 ```
 
 ### 4.3 Entity のテスト（`test_booking.py`）
