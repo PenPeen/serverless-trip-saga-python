@@ -26,9 +26,10 @@ Hands-on 06 で作成した `Orchestration` Construct を拡張し、補償ト�
 from aws_cdk import (
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
-    aws_lambda as _lambda,
 )
 from constructs import Construct
+
+from infra.constructs.functions import Functions
 
 
 class Orchestration(Construct):
@@ -38,11 +39,7 @@ class Orchestration(Construct):
         self,
         scope: Construct,
         id: str,
-        flight_reserve: _lambda.Function,
-        flight_cancel: _lambda.Function,
-        hotel_reserve: _lambda.Function,
-        hotel_cancel: _lambda.Function,
-        payment_process: _lambda.Function,
+        functions: Functions,
     ) -> None:
         super().__init__(scope, id)
 
@@ -51,19 +48,19 @@ class Orchestration(Construct):
         # ========================================================================
         reserve_flight_task = tasks.LambdaInvoke(
             self, "ReserveFlight",
-            lambda_function=flight_reserve,
+            lambda_function=functions.flight_reserve,
             result_path="$.results.flight",
         )
 
         reserve_hotel_task = tasks.LambdaInvoke(
             self, "ReserveHotel",
-            lambda_function=hotel_reserve,
+            lambda_function=functions.hotel_reserve,
             result_path="$.results.hotel",
         )
 
         process_payment_task = tasks.LambdaInvoke(
             self, "ProcessPayment",
-            lambda_function=payment_process,
+            lambda_function=functions.payment_process,
             result_path="$.results.payment",
         )
 
@@ -76,14 +73,14 @@ class Orchestration(Construct):
         # Payment 失敗時のロールバック用
         cancel_hotel_from_payment = tasks.LambdaInvoke(
             self, "CancelHotelFromPayment",
-            lambda_function=hotel_cancel,
+            lambda_function=functions.hotel_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel_cancel",
         )
 
         cancel_flight_from_payment = tasks.LambdaInvoke(
             self, "CancelFlightFromPayment",
-            lambda_function=flight_cancel,
+            lambda_function=functions.flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
@@ -91,7 +88,7 @@ class Orchestration(Construct):
         # Hotel 失敗時のロールバック用
         cancel_flight_from_hotel = tasks.LambdaInvoke(
             self, "CancelFlightFromHotel",
-            lambda_function=flight_cancel,
+            lambda_function=functions.flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
@@ -147,13 +144,9 @@ class Orchestration(Construct):
 ### serverless_trip_saga_stack.py (更新)
 ```python
         # Orchestration Construct (補償トランザクション追加)
-        orchestration = Orchestration(
+        Orchestration(
             self, "Orchestration",
-            flight_reserve=functions.flight_reserve,
-            flight_cancel=functions.flight_cancel,
-            hotel_reserve=functions.hotel_reserve,
-            hotel_cancel=functions.hotel_cancel,
-            payment_process=functions.payment_process,
+            functions=functions,
         )
 ```
 
