@@ -1,7 +1,6 @@
-from aws_cdk import (
-    aws_dynamodb as dynamodb,
-    aws_lambda as _lambda,
-)
+from aws_cdk import aws_dynamodb as dynamodb
+from aws_cdk import aws_lambda as _lambda
+
 from constructs import Construct
 
 
