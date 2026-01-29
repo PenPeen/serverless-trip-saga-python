@@ -35,9 +35,10 @@ infra/
 from aws_cdk import (
     aws_stepfunctions as sfn,
     aws_stepfunctions_tasks as tasks,
-    aws_lambda as _lambda,
 )
 from constructs import Construct
+
+from infra.constructs.functions import Functions
 
 
 class Orchestration(Construct):
@@ -47,9 +48,7 @@ class Orchestration(Construct):
         self,
         scope: Construct,
         id: str,
-        flight_reserve: _lambda.Function,
-        hotel_reserve: _lambda.Function,
-        payment_process: _lambda.Function,
+        functions: Functions,
     ) -> None:
         super().__init__(scope, id)
 
@@ -58,21 +57,21 @@ class Orchestration(Construct):
         # ========================================================================
         reserve_flight_task = tasks.LambdaInvoke(
             self, "ReserveFlight",
-            lambda_function=flight_reserve,
+            lambda_function=functions.flight_reserve,
             retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
 
         reserve_hotel_task = tasks.LambdaInvoke(
             self, "ReserveHotel",
-            lambda_function=hotel_reserve,
+            lambda_function=functions.hotel_reserve,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
 
         process_payment_task = tasks.LambdaInvoke(
             self, "ProcessPayment",
-            lambda_function=payment_process,
+            lambda_function=functions.payment_process,
             retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
@@ -129,11 +128,9 @@ class ServerlessTripSagaStack(Stack):
         )
 
         # Orchestration Construct
-        orchestration = Orchestration(
+        Orchestration(
             self, "Orchestration",
-            flight_reserve=functions.flight_reserve,
-            hotel_reserve=functions.hotel_reserve,
-            payment_process=functions.payment_process,
+            functions=functions,
         )
 ```
 
