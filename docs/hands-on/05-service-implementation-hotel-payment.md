@@ -1137,7 +1137,6 @@ class Functions(Construct):
 ### テストファイル構造
 
 Value Object と Entity を分離したことで、テストも細かく分割できます。
-各サービスディレクトリには `conftest.py` を配置し、**Factories as fixtures** パターンでテストデータ生成を共通化します。
 
 ```
 tests/unit/services/
@@ -1151,7 +1150,6 @@ tests/unit/services/
 │           └── test_iso_date_time.py
 ├── hotel/
 │   ├── __init__.py
-│   ├── conftest.py                    # Factories as fixtures（HotelBooking 生成用）
 │   ├── domain/
 │   │   ├── entity/
 │   │   │   ├── __init__.py
@@ -1165,7 +1163,6 @@ tests/unit/services/
 │   └── test_reserve_hotel.py
 └── payment/
     ├── __init__.py
-    ├── conftest.py                    # Factories as fixtures（Payment 生成用）
     ├── domain/
     │   ├── entity/
     │   │   ├── __init__.py
@@ -1176,8 +1173,6 @@ tests/unit/services/
     ├── test_payment_factory.py
     └── test_process_payment.py
 ```
-
-> **Note:** `conftest.py` の詳細な実装パターンについては [Hands-on 04: Service Implementation - Flight](./04-service-implementation-flight.md) の「テスト共通 fixture（conftest.py）」を参照してください。
 
 ## 8. パターンの効果
 

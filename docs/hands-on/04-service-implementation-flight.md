@@ -1044,7 +1044,6 @@ Repository パターンを採用したことで、**DynamoDB への依存なし�
 ### 4.1 テストファイルの配置
 
 Value Object と Entity を分離したことで、テストも細かく分割できます。
-`conftest.py` には pytest の「Factories as fixtures」パターンを使用したテストデータ生成用の fixture を配置します。
 
 ```
 tests/unit/services/
@@ -1058,7 +1057,6 @@ tests/unit/services/
 │           └── test_iso_date_time.py
 └── flight/
     ├── __init__.py
-    ├── conftest.py           # Factories as fixtures（テストデータ生成）
     ├── domain/
     │   ├── entity/
     │   │   ├── __init__.py
@@ -1101,20 +1099,19 @@ class TestFlightNumber:
             FlightNumber("INVALID")
 ```
 
-### 4.3 Factories as fixtures（`conftest.py`）
+### 4.3 Entity のテスト（`test_booking.py`）
 
 pytest の「Factories as fixtures」パターンを使用して、テストデータ生成用の fixture を定義します。
 fixture から**関数（Factory）を返す**ことで、テストごとにパラメータを柔軟に変更できます。
 
 参考: https://docs.pytest.org/en/stable/how-to/fixtures.html#factories-as-fixtures
 
-`tests/unit/services/flight/conftest.py`
-
 ```python
 import pytest
 from decimal import Decimal
 
 from services.shared.domain import TripId, Money, Currency, IsoDateTime
+from services.shared.domain.exception import BusinessRuleViolationException
 
 from services.flight.domain.entity import Booking
 from services.flight.domain.enum import BookingStatus
@@ -1148,22 +1145,6 @@ def create_booking():
             status=status,
         )
     return _factory
-```
-
-### 4.4 Entity のテスト（`test_booking.py`）
-
-`conftest.py` で定義した `create_booking` fixture を使用してテストを記述します。
-
-```python
-import pytest
-from decimal import Decimal
-
-from services.shared.domain import TripId, Money, Currency, IsoDateTime
-from services.shared.domain.exception import BusinessRuleViolationException
-
-from services.flight.domain.entity import Booking
-from services.flight.domain.enum import BookingStatus
-from services.flight.domain.value_object import BookingId, FlightNumber
 
 
 class TestBooking:
@@ -1194,7 +1175,7 @@ class TestBooking:
             )
 ```
 
-### 4.5 Application Service のテスト（`test_reserve_flight.py`）
+### 4.4 Application Service のテスト（`test_reserve_flight.py`）
 
 ```python
 from decimal import Decimal
