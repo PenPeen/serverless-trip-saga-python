@@ -15,6 +15,9 @@ Start -> Reserve Flight -> Reserve Hotel -> Process Payment -> Succeed
 * **データの受け渡し (Context Propagation)**:
     * 単純な `output_path="$.Payload"` ではなく、**`result_path`** の使用を推奨します（例: `result_path="$.results.flight"`）。
     * これにより、前のステップの入力データ（予約IDや顧客情報）を上書きせずに保持したまま、後続のステップや補償トランザクション（キャンセル処理）で参照可能になります。
+* **AWSサービスエラーへのリトライ (`retry_on_service_exceptions`)**:
+    * `retry_on_service_exceptions=True` を設定することで、一時的なAWSサービスエラー（ネットワーク障害、スロットリングなど）に対して自動リトライが行われます。
+    * **前提条件**: リトライを安全に行うためには、各Lambda関数が **冪等性（べきとう性）** を保証している必要があります。本プロジェクトでは、DynamoDBの条件付き書き込み（`attribute_not_exists`）により、同一リクエストの重複実行を防止しています（詳細は Hands-on 04, 05 を参照）。
 
 ### ファイル構成
 ```
@@ -56,18 +59,21 @@ class Orchestration(Construct):
         reserve_flight_task = tasks.LambdaInvoke(
             self, "ReserveFlight",
             lambda_function=flight_reserve,
+            retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
 
         reserve_hotel_task = tasks.LambdaInvoke(
             self, "ReserveHotel",
             lambda_function=hotel_reserve,
+            retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
 
         process_payment_task = tasks.LambdaInvoke(
             self, "ProcessPayment",
             lambda_function=payment_process,
+            retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
 
