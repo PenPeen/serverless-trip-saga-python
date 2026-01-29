@@ -1044,6 +1044,7 @@ Repository パターンを採用したことで、**DynamoDB への依存なし�
 ### 4.1 テストファイルの配置
 
 Value Object と Entity を分離したことで、テストも細かく分割できます。
+`conftest.py` には pytest の「Factories as fixtures」パターンを使用したテストデータ生成用の fixture を配置します。
 
 ```
 tests/unit/services/
@@ -1057,6 +1058,7 @@ tests/unit/services/
 │           └── test_iso_date_time.py
 └── flight/
     ├── __init__.py
+    ├── conftest.py           # Factories as fixtures（テストデータ生成）
     ├── domain/
     │   ├── entity/
     │   │   ├── __init__.py
@@ -1099,7 +1101,58 @@ class TestFlightNumber:
             FlightNumber("INVALID")
 ```
 
-### 4.3 Entity のテスト（`test_booking.py`）
+### 4.3 Factories as fixtures（`conftest.py`）
+
+pytest の「Factories as fixtures」パターンを使用して、テストデータ生成用の fixture を定義します。
+fixture から**関数（Factory）を返す**ことで、テストごとにパラメータを柔軟に変更できます。
+
+参考: https://docs.pytest.org/en/stable/how-to/fixtures.html#factories-as-fixtures
+
+`tests/unit/services/flight/conftest.py`
+
+```python
+import pytest
+from decimal import Decimal
+
+from services.shared.domain import TripId, Money, Currency, IsoDateTime
+
+from services.flight.domain.entity import Booking
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
+
+
+@pytest.fixture
+def create_booking():
+    """Booking を生成する Factory を返す fixture
+
+    Factories as fixtures パターン:
+    オブジェクトそのものではなく「オブジェクトを作る関数」を返すことで、
+    テストごとにパラメータを柔軟に変更できる。
+    """
+    def _factory(
+        status: BookingStatus = BookingStatus.PENDING,
+        booking_id: str = "test-id",
+        trip_id: str = "trip-123",
+        flight_number: str = "NH001",
+        departure_time: str = "2024-01-01T10:00:00",
+        arrival_time: str = "2024-01-01T12:00:00",
+        price_amount: Decimal = Decimal("50000"),
+    ) -> Booking:
+        return Booking(
+            id=BookingId(value=booking_id),
+            trip_id=TripId(value=trip_id),
+            flight_number=FlightNumber(value=flight_number),
+            departure_time=IsoDateTime.from_string(departure_time),
+            arrival_time=IsoDateTime.from_string(arrival_time),
+            price=Money(amount=price_amount, currency=Currency.jpy()),
+            status=status,
+        )
+    return _factory
+```
+
+### 4.4 Entity のテスト（`test_booking.py`）
+
+`conftest.py` で定義した `create_booking` fixture を使用してテストを記述します。
 
 ```python
 import pytest
@@ -1116,29 +1169,15 @@ from services.flight.domain.value_object import BookingId, FlightNumber
 class TestBooking:
     """Booking Entity のテスト"""
 
-    def _create_booking(
-        self, status: BookingStatus = BookingStatus.PENDING
-    ) -> Booking:
-        """テスト用の Booking を生成"""
-        return Booking(
-            id=BookingId(value="test-id"),
-            trip_id=TripId(value="trip-123"),
-            flight_number=FlightNumber(value="NH001"),
-            departure_time=IsoDateTime.from_string("2024-01-01T10:00:00"),
-            arrival_time=IsoDateTime.from_string("2024-01-01T12:00:00"),
-            price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
-            status=status,
-        )
-
-    def test_confirm_pending_booking(self):
+    def test_confirm_pending_booking(self, create_booking):
         """PENDING 状態の予約を確定できる"""
-        booking = self._create_booking(status=BookingStatus.PENDING)
+        booking = create_booking(status=BookingStatus.PENDING)
         booking.confirm()
         assert booking.status == BookingStatus.CONFIRMED
 
-    def test_cannot_confirm_cancelled_booking(self):
+    def test_cannot_confirm_cancelled_booking(self, create_booking):
         """CANCELLED 状態の予約は確定できない"""
-        booking = self._create_booking(status=BookingStatus.CANCELLED)
+        booking = create_booking(status=BookingStatus.CANCELLED)
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
 
@@ -1155,7 +1194,7 @@ class TestBooking:
             )
 ```
 
-### 4.4 Application Service のテスト（`test_reserve_flight.py`）
+### 4.5 Application Service のテスト（`test_reserve_flight.py`）
 
 ```python
 from decimal import Decimal
