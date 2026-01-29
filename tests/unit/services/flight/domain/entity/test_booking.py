@@ -44,7 +44,7 @@ class TestBooking:
         assert booking.status == BookingStatus.CONFIRMED
 
     def test_cannot_confirm_cancelled_booking(self, create_booking):
-        """CANCELLED状態の予約をconfirmすると BusinessRuleViolationException が発生する"""
+        """CANCELLED状態の予約はconfirmできない"""
         booking = create_booking(status=BookingStatus.CANCELLED)
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
