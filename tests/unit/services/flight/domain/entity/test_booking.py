@@ -43,13 +43,13 @@ class TestBooking:
         booking.confirm()
         assert booking.status == BookingStatus.CONFIRMED
 
-    def test_cannnot_confirm_cancelled_booking(self, create_booking):
-        """CANCELD状態の予約をconfirmすると BusinessRuleViolationException が発生する"""
+    def test_cannot_confirm_cancelled_booking(self, create_booking):
+        """CANCELLED状態の予約をconfirmすると BusinessRuleViolationException が発生する"""
         booking = create_booking(status=BookingStatus.CANCELLED)
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
 
-    def tset_invalid_shecule_raises_erorr(self):
+    def test_invalid_schedule_raises_error(self):
         """出発時刻よりも到着時刻が前の場合、例外が発生する"""
         departure_time = IsoDateTime.from_string("2024-01-01T12:00:00")
         arrival_time = IsoDateTime.from_string("2024-01-01T10:00:00")
