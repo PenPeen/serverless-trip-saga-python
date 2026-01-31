@@ -1,0 +1,55 @@
+from services.shared.domain.entity.aggregate import AggregateRoot
+from services.shared.domain.exception.exceptions import BusinessRuleViolationException
+from services.shared.domain.value_object.money import Money
+from services.shared.domain.value_object.trip_id import TripId
+
+from services.payment.domain.value_object.payment_id import PaymentId
+from services.payment.domain.enum.payment_status import PaymentStatus
+
+
+class Payment(AggregateRoot[PaymentId]):
+    """決済エンティティ
+
+    AggregateRoot 基底クラスを継承し、PaymentId で同一性を判定する。
+    全てのフィールドは Value Object で表現される。
+    """
+
+    def __init__(
+        self,
+        id: PaymentId,
+        trip_id: TripId,
+        amount: Money,
+        status: PaymentStatus = PaymentStatus.PENDING,
+    ) -> None:
+        super().__init__(id)
+        self._trip_id = trip_id
+        self._amount = amount
+        self._status = status
+
+    @property
+    def trip_id(self) -> TripId:
+        return self._trip_id
+
+    @property
+    def amount(self) -> Money:
+        return self._amount
+
+    @property
+    def status(self) -> PaymentStatus:
+        return self._status
+
+    def complete(self) -> None:
+        """決済を完了する"""
+        if self._status != PaymentStatus.PENDING:
+            raise BusinessRuleViolationException(
+                f"Cannot complete payment in {self._status} status"
+            )
+        self._status = PaymentStatus.COMPLETED
+
+    def refund(self) -> None:
+        """払い戻しを行う（補償トランザクション用）"""
+        if self._status != PaymentStatus.COMPLETED:
+            raise BusinessRuleViolationException(
+                "Can only refund completed payments"
+            )
+        self._status = PaymentStatus.REFUNDED
