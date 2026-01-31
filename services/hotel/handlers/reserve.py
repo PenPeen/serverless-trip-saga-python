@@ -3,22 +3,19 @@ from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from pydantic import BaseModel
 
-from services.shared.domain import TripId
-
 from services.hotel.applications.reserve_hotel import ReserveHotelService
 from services.hotel.domain.entity import HotelBooking
+from services.hotel.domain.factory import HotelBookingFactory
+from services.hotel.domain.factory.hotel_booking_factory import HotelDetails
+from services.hotel.handlers.request_models import ReserveHotelRequest
 from services.hotel.infrastructure.dynamodb_hotel_booking_repository import (
     DynamoDBHotelBookingRepository,
 )
-from services.hotel.domain.factory import HotelBookingFactory
-from services.hotel.handlers.request_models import ReserveHotelRequest
+from services.shared.domain import TripId
 
 logger = Logger()
 
 
-# =============================================================================
-# レスポンスモデル（Pydantic）
-# =============================================================================
 class HotelBookingData(BaseModel):
     """ホテル予約データのレスポンスモデル"""
 
@@ -49,17 +46,11 @@ class ErrorResponse(BaseModel):
     details: list | None = None
 
 
-# =============================================================================
-# 依存関係の組み立て（Composition Root）
-# =============================================================================
 repository = DynamoDBHotelBookingRepository()
 factory = HotelBookingFactory()
 service = ReserveHotelService(repository=repository, factory=factory)
 
 
-# =============================================================================
-# ヘルパー関数
-# =============================================================================
 def _to_response(booking: HotelBooking) -> dict:
     """Entity をレスポンス形式に変換"""
     return SuccessResponse(
@@ -77,9 +68,7 @@ def _to_response(booking: HotelBooking) -> dict:
     ).model_dump()
 
 
-def _error_response(
-    error_code: str, message: str, details: list | None = None
-) -> dict:
+def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
     """エラーレスポンスを生成"""
     return ErrorResponse(
         error_code=error_code,
@@ -88,22 +77,15 @@ def _error_response(
     ).model_dump(exclude_none=True)
 
 
-# =============================================================================
-# Lambda エントリーポイント
-# =============================================================================
 @logger.inject_lambda_context
 @event_parser(model=ReserveHotelRequest)
 def lambda_handler(event: ReserveHotelRequest, context: LambdaContext) -> dict:
-    """ホテル予約 Lambda ハンドラ
-
-    @event_parser デコレータで自動バリデーション後、ホテル予約処理を実行する。
-    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
-    """
+    """ホテル予約 Lambda ハンドラ"""
     logger.info("Received reserve hotel request")
 
     try:
         trip_id = TripId(value=event.trip_id)
-        hotel_details = {
+        hotel_details: HotelDetails = {
             "hotel_name": event.hotel_details.hotel_name,
             "check_in_date": event.hotel_details.check_in_date,
             "check_out_date": event.hotel_details.check_out_date,
