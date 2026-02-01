@@ -27,7 +27,7 @@ class HotelDetailsRequest(BaseModel):
     price_amount: Decimal = Field(
         ...,
         gt=0,
-        description="料金（0より大きい値）",
+        description="料金",
     )
     price_currency: str = Field(
         default="JPY",
@@ -37,7 +37,7 @@ class HotelDetailsRequest(BaseModel):
 
     @field_validator("price_amount", mode="before")
     @classmethod
-    def convert_price_to_decimal(cls, v):
+    def convert_price_to_decimal(cls, v: object) -> Decimal:
         if isinstance(v, Decimal):
             return v
         return Decimal(str(v))
