@@ -1,49 +1,23 @@
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel
 
 from services.hotel.applications.reserve_hotel import ReserveHotelService
 from services.hotel.domain.entity import HotelBooking
 from services.hotel.domain.factory import HotelBookingFactory
 from services.hotel.domain.factory.hotel_booking_factory import HotelDetails
 from services.hotel.handlers.request_models import ReserveHotelRequest
+from services.hotel.handlers.response_models import (
+    ErrorResponse,
+    HotelBookingData,
+    SuccessResponse,
+)
 from services.hotel.infrastructure.dynamodb_hotel_booking_repository import (
     DynamoDBHotelBookingRepository,
 )
 from services.shared.domain import TripId
 
 logger = Logger()
-
-
-class HotelBookingData(BaseModel):
-    """ホテル予約データのレスポンスモデル"""
-
-    booking_id: str
-    trip_id: str
-    hotel_name: str
-    check_in_date: str
-    check_out_date: str
-    nights: int
-    price_amount: str
-    price_currency: str
-    status: str
-
-
-class SuccessResponse(BaseModel):
-    """成功レスポンスモデル"""
-
-    status: str = "success"
-    data: HotelBookingData
-
-
-class ErrorResponse(BaseModel):
-    """エラーレスポンスモデル"""
-
-    status: str = "error"
-    error_code: str
-    message: str
-    details: list | None = None
 
 
 repository = DynamoDBHotelBookingRepository()
