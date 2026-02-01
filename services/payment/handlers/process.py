@@ -18,18 +18,11 @@ from services.shared.domain import TripId
 
 logger = Logger()
 
-
-# =============================================================================
-# 依存関係の組み立て（Composition Root）
-# =============================================================================
 repository = DynamoDBPaymentRepository()
 factory = PaymentFactory()
 service = ProcessPaymentService(repository=repository, factory=factory)
 
 
-# =============================================================================
-# ヘルパー関数
-# =============================================================================
 def _to_response(payment: Payment) -> dict:
     """Entity をレスポンス形式に変換"""
     return SuccessResponse(
@@ -52,9 +45,6 @@ def _error_response(error_code: str, message: str, details: list | None = None) 
     ).model_dump(exclude_none=True)
 
 
-# =============================================================================
-# Lambda エントリーポイント
-# =============================================================================
 @logger.inject_lambda_context
 @event_parser(model=ProcessPaymentRequest)
 def lambda_handler(event: ProcessPaymentRequest, context: LambdaContext) -> dict:
