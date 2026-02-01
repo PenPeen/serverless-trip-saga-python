@@ -1,17 +1,11 @@
 from services.payment.domain.enum.payment_status import PaymentStatus
 from services.payment.domain.value_object.payment_id import PaymentId
-from services.shared.domain.entity.aggregate import AggregateRoot
-from services.shared.domain.exception.exceptions import BusinessRuleViolationException
-from services.shared.domain.value_object.money import Money
-from services.shared.domain.value_object.trip_id import TripId
+from services.shared.domain import AggregateRoot, Money, TripId
+from services.shared.domain.exception import BusinessRuleViolationException
 
 
 class Payment(AggregateRoot[PaymentId]):
-    """決済エンティティ
-
-    AggregateRoot 基底クラスを継承し、PaymentId で同一性を判定する。
-    全てのフィールドは Value Object で表現される。
-    """
+    """決済エンティティ"""
 
     def __init__(
         self,
@@ -47,8 +41,8 @@ class Payment(AggregateRoot[PaymentId]):
 
     def refund(self) -> None:
         """払い戻しを行う（補償トランザクション用）"""
+        if self._status == PaymentStatus.REFUNDED:
+            return
         if self._status != PaymentStatus.COMPLETED:
-            raise BusinessRuleViolationException(
-                "Can only refund completed payments"
-            )
+            raise BusinessRuleViolationException("Can only refund completed payments")
         self._status = PaymentStatus.REFUNDED
