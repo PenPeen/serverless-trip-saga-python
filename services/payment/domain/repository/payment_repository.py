@@ -1,10 +1,9 @@
 from abc import abstractmethod
 from typing import Optional
 
-from services.shared.domain import Repository, TripId
-
-from services.payment.domain.value_object.payment_id import PaymentId
 from services.payment.domain.entity.payment import Payment
+from services.payment.domain.value_object.payment_id import PaymentId
+from services.shared.domain import Repository, TripId
 
 
 class PaymentRepository(Repository[Payment, PaymentId]):
