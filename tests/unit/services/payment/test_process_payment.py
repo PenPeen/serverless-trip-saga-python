@@ -12,9 +12,7 @@ class TestProcessPaymentService:
     def test_process_creates_completes_and_saves_payment(self):
         mock_repository = MagicMock()
         factory = PaymentFactory()
-        service = ProcessPaymentService(
-            repository=mock_repository, factory=factory
-        )
+        service = ProcessPaymentService(repository=mock_repository, factory=factory)
         trip_id = TripId(value="trip-123")
 
         payment = service.process(

@@ -15,9 +15,7 @@ class TestReserveHotelService:
     def test_reserve_creates_and_saves_booking(self):
         mock_repository = MagicMock()
         factory = HotelBookingFactory()
-        service = ReserveHotelService(
-            repository=mock_repository, factory=factory
-        )
+        service = ReserveHotelService(repository=mock_repository, factory=factory)
         trip_id = TripId(value="trip-123")
         hotel_details: HotelDetails = {
             "hotel_name": "Grand Hotel",

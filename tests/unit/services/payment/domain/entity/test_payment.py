@@ -60,7 +60,5 @@ class TestPayment:
     def test_payment_properties(self, create_payment):
         payment = create_payment()
         assert payment.trip_id == TripId(value="trip-123")
-        assert payment.amount == Money(
-            amount=Decimal("50000"), currency=Currency.jpy()
-        )
+        assert payment.amount == Money(amount=Decimal("50000"), currency=Currency.jpy())
         assert payment.status == PaymentStatus.PENDING
