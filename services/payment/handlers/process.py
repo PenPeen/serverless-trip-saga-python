@@ -1,48 +1,22 @@
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel
-
-from services.shared.domain import TripId
 
 from services.payment.applications.process_payment import ProcessPaymentService
 from services.payment.domain.entity import Payment
+from services.payment.domain.factory import PaymentFactory
+from services.payment.handlers.request_models import ProcessPaymentRequest
+from services.payment.handlers.response_models import (
+    ErrorResponse,
+    PaymentData,
+    SuccessResponse,
+)
 from services.payment.infrastructure.dynamodb_payment_repository import (
     DynamoDBPaymentRepository,
 )
-from services.payment.domain.factory import PaymentFactory
-from services.payment.handlers.request_models import ProcessPaymentRequest
+from services.shared.domain import TripId
 
 logger = Logger()
-
-
-# =============================================================================
-# レスポンスモデル（Pydantic）
-# =============================================================================
-class PaymentData(BaseModel):
-    """決済データのレスポンスモデル"""
-
-    payment_id: str
-    trip_id: str
-    amount: str
-    currency: str
-    status: str
-
-
-class SuccessResponse(BaseModel):
-    """成功レスポンスモデル"""
-
-    status: str = "success"
-    data: PaymentData
-
-
-class ErrorResponse(BaseModel):
-    """エラーレスポンスモデル"""
-
-    status: str = "error"
-    error_code: str
-    message: str
-    details: list | None = None
 
 
 # =============================================================================
@@ -69,9 +43,7 @@ def _to_response(payment: Payment) -> dict:
     ).model_dump()
 
 
-def _error_response(
-    error_code: str, message: str, details: list | None = None
-) -> dict:
+def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
     """エラーレスポンスを生成"""
     return ErrorResponse(
         error_code=error_code,
