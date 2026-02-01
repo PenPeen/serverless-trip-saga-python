@@ -3,48 +3,23 @@ from typing import Optional
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from pydantic import BaseModel
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.domain.entity.booking import Booking
 from services.flight.domain.factory import BookingFactory
 from services.flight.domain.factory.booking_factory import FlightDetails
 from services.flight.handlers.request_models import ReserveFlightRequest
+from services.flight.handlers.response_models import (
+    BookingData,
+    ErrorResponse,
+    SuccessResponse,
+)
 from services.flight.infrastructure.dynamodb_booking_repository import (
     DynamoDBBookingRepository,
 )
 from services.shared.domain import TripId
 
 logger = Logger()
-
-
-class BookingData(BaseModel):
-    """予約データのレスポンスモデル"""
-
-    booking_id: str
-    trip_id: str
-    flight_number: str
-    departure_time: str
-    arrival_time: str
-    price_amount: str
-    price_currency: str
-    status: str
-
-
-class SuccessResponse(BaseModel):
-    """成功レスポンスモデル"""
-
-    status: str = "success"
-    data: BookingData
-
-
-class ErrorResponse(BaseModel):
-    """エラーレスポンスモデル"""
-
-    status: str = "error"
-    error_code: str
-    message: str
-    details: list | None = None
 
 
 repository = DynamoDBBookingRepository()
