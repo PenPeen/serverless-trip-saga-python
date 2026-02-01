@@ -1,6 +1,5 @@
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as _lambda
-
 from constructs import Construct
 
 
@@ -16,99 +15,81 @@ class Functions(Construct):
     ) -> None:
         super().__init__(scope, id)
 
-        # ========================================================================
-        # Flight Service Lambda
-        # ========================================================================
-        self.flight_reserve = _lambda.Function(
-            self,
+        self.flight_reserve = self._create_function(
             "FlightReserveLambda",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.flight.handlers.reserve.lambda_handler",
-            code=_lambda.Code.from_asset("."),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "flight-service",
-            },
+            "services.flight.handlers.reserve.lambda_handler",
+            "flight-service",
+            table,
+            common_layer,
         )
 
-        self.flight_cancel = _lambda.Function(
-            self,
+        self.flight_cancel = self._create_function(
             "FlightCancelLambda",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.flight.handlers.cancel.lambda_handler",
-            code=_lambda.Code.from_asset("."),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "flight-service",
-            },
+            "services.flight.handlers.cancel.lambda_handler",
+            "flight-service",
+            table,
+            common_layer,
         )
 
-        # ========================================================================
-        # Hotel Service Lambda
-        # ========================================================================
-        self.hotel_reserve = _lambda.Function(
-            self,
+        self.hotel_reserve = self._create_function(
             "HotelReserveLambda",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.hotel.handlers.reserve.lambda_handler",
-            code=_lambda.Code.from_asset("."),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "hotel-service",
-            },
+            "services.hotel.handlers.reserve.lambda_handler",
+            "hotel-service",
+            table,
+            common_layer,
         )
 
-        self.hotel_cancel = _lambda.Function(
-            self,
+        self.hotel_cancel = self._create_function(
             "HotelCancelLambda",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.hotel.handlers.cancel.lambda_handler",
-            code=_lambda.Code.from_asset("."),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "hotel-service",
-            },
+            "services.hotel.handlers.cancel.lambda_handler",
+            "hotel-service",
+            table,
+            common_layer,
         )
 
-        # ========================================================================
-        # Payment Service Lambda
-        # ========================================================================
-        self.payment_process = _lambda.Function(
-            self,
+        self.payment_process = self._create_function(
             "PaymentProcessLambda",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.payment.handlers.process.lambda_handler",
-            code=_lambda.Code.from_asset("."),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "payment-service",
-            },
+            "services.payment.handlers.process.lambda_handler",
+            "payment-service",
+            table,
+            common_layer,
         )
 
-        self.payment_refund = _lambda.Function(
-            self,
+        self.payment_refund = self._create_function(
             "PaymentRefundLambda",
+            "services.payment.handlers.refund.lambda_handler",
+            "payment-service",
+            table,
+            common_layer,
+        )
+
+        for fn in [
+            self.flight_reserve,
+            self.flight_cancel,
+            self.hotel_reserve,
+            self.hotel_cancel,
+            self.payment_process,
+            self.payment_refund,
+        ]:
+            table.grant_read_write_data(fn)
+
+    def _create_function(
+        self,
+        id: str,
+        handler: str,
+        service_name: str,
+        table: dynamodb.Table,
+        common_layer: _lambda.LayerVersion,
+    ) -> _lambda.Function:
+        return _lambda.Function(
+            self,
+            id,
             runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="services.payment.handlers.refund.lambda_handler",
+            handler=handler,
             code=_lambda.Code.from_asset("."),
             layers=[common_layer],
             environment={
                 "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": "payment-service",
+                "POWERTOOLS_SERVICE_NAME": service_name,
             },
         )
-
-        # ========================================================================
-        # DynamoDB への読み書き権限を付与
-        # ========================================================================
-        table.grant_read_write_data(self.flight_reserve)
-        table.grant_read_write_data(self.flight_cancel)
-        table.grant_read_write_data(self.hotel_reserve)
-        table.grant_read_write_data(self.hotel_cancel)
-        table.grant_read_write_data(self.payment_process)
-        table.grant_read_write_data(self.payment_refund)
