@@ -1,10 +1,9 @@
+from services.payment.domain.enum.payment_status import PaymentStatus
+from services.payment.domain.value_object.payment_id import PaymentId
 from services.shared.domain.entity.aggregate import AggregateRoot
 from services.shared.domain.exception.exceptions import BusinessRuleViolationException
 from services.shared.domain.value_object.money import Money
 from services.shared.domain.value_object.trip_id import TripId
-
-from services.payment.domain.value_object.payment_id import PaymentId
-from services.payment.domain.enum.payment_status import PaymentStatus
 
 
 class Payment(AggregateRoot[PaymentId]):
