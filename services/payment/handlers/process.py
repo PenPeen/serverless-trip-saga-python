@@ -48,11 +48,7 @@ def _error_response(error_code: str, message: str, details: list | None = None) 
 @logger.inject_lambda_context
 @event_parser(model=ProcessPaymentRequest)
 def lambda_handler(event: ProcessPaymentRequest, context: LambdaContext) -> dict:
-    """決済処理 Lambda ハンドラ
-
-    @event_parser デコレータで自動バリデーション後、決済処理を実行する。
-    バリデーションエラーは ValidationError として raise され、Step Functions でハンドリング可能。
-    """
+    """決済処理のLambdaハンドラー"""
     logger.info("Received process payment request")
 
     try:

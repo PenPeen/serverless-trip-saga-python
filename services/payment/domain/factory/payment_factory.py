@@ -1,12 +1,11 @@
 from decimal import Decimal
 
+from services.payment.domain.entity.payment import Payment
+from services.payment.domain.enum.payment_status import PaymentStatus
+from services.payment.domain.value_object.payment_id import PaymentId
 from services.shared.domain.value_object.currency import Currency
 from services.shared.domain.value_object.money import Money
 from services.shared.domain.value_object.trip_id import TripId
-
-from services.payment.domain.entity.payment import Payment
-from services.payment.domain.value_object.payment_id import PaymentId
-from services.payment.domain.enum.payment_status import PaymentStatus
 
 
 class PaymentFactory:
