@@ -9,11 +9,7 @@ from services.shared.domain.value_object.trip_id import TripId
 
 
 class PaymentFactory:
-    """決済ファクトリ
-
-    - 冪等性を担保する ID 生成
-    - プリミティブ型から Value Object への変換
-    """
+    """決済ファクトリ"""
 
     def create(
         self,
@@ -22,10 +18,8 @@ class PaymentFactory:
         currency_code: str,
     ) -> Payment:
         """新規決済エンティティを生成する"""
-        # 冪等性担保: 同じ TripId からは常に同じ PaymentId を生成
         payment_id = PaymentId.from_trip_id(trip_id)
 
-        # プリミティブ型から Value Object に変換
         money = Money(amount=amount, currency=Currency(currency_code))
 
         return Payment(
