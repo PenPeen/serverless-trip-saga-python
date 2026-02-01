@@ -7,10 +7,7 @@ from services.shared.domain.value_object.trip_id import TripId
 
 @dataclass(frozen=True)
 class PaymentId:
-    """決済ID（Value Object）
-
-    不変で、値が同じなら同一とみなされる。
-    """
+    """決済ID"""
 
     value: str
 
