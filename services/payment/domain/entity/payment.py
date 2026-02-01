@@ -41,6 +41,8 @@ class Payment(AggregateRoot[PaymentId]):
 
     def refund(self) -> None:
         """払い戻しを行う（補償トランザクション用）"""
+        if self._status == PaymentStatus.REFUNDED:
+            return
         if self._status != PaymentStatus.COMPLETED:
             raise BusinessRuleViolationException("Can only refund completed payments")
         self._status = PaymentStatus.REFUNDED
