@@ -5,7 +5,6 @@ from pathlib import Path
 import jsii
 from aws_cdk import BundlingOptions, ILocalBundling
 from aws_cdk import aws_lambda as _lambda
-
 from constructs import Construct
 
 logger = logging.getLogger(__name__)
