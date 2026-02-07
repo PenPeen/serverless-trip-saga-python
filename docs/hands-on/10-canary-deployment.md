@@ -124,14 +124,12 @@ class Deployment(Construct):
 
 ### infra/constructs/\_\_init\_\_.py (更新)
 ```python
-from .database import Database
-from .layers import Layers
-from .functions import Functions
-from .orchestration import Orchestration
-from .api import Api
-from .deployment import Deployment
-
-__all__ = ["Database", "Layers", "Functions", "Orchestration", "Api", "Deployment"]
+from .api import Api as Api
+from .database import Database as Database
+from .deployment import Deployment as Deployment
+from .functions import Functions as Functions
+from .layers import Layers as Layers
+from .orchestration import Orchestration as Orchestration
 ```
 
 ### serverless_trip_saga_stack.py (更新)

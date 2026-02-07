@@ -231,27 +231,16 @@ class IsoDateTime:
 #### shared/domain/__init__.py の更新
 
 ```python
-from .entity import Entity, AggregateRoot
-from .repository import Repository
-from .exception import (
-    DomainException,
-    ResourceNotFoundException,
-    BusinessRuleViolationException,
-)
-from .value_object import TripId, Currency, Money, IsoDateTime
-
-__all__ = [
-    "Entity",
-    "AggregateRoot",
-    "Repository",
-    "DomainException",
-    "ResourceNotFoundException",
-    "BusinessRuleViolationException",
-    "TripId",
-    "Currency",
-    "Money",
-    "IsoDateTime",
-]
+from .entity import AggregateRoot as AggregateRoot
+from .entity import Entity as Entity
+from .exception import BusinessRuleViolationException as BusinessRuleViolationException
+from .exception import DomainException as DomainException
+from .exception import ResourceNotFoundException as ResourceNotFoundException
+from .repository import Repository as Repository
+from .value_object import Currency as Currency
+from .value_object import IsoDateTime as IsoDateTime
+from .value_object import Money as Money
+from .value_object import TripId as TripId
 ```
 
 ### 3.2 Flight 固有の Value Object
@@ -431,21 +420,13 @@ class Booking(AggregateRoot[BookingId]):
 ### 3.4 Domain Layer: flight/domain/__init__.py
 
 ```python
-from .entity import Booking
-from .enum import BookingStatus
-from .factory import BookingFactory, FlightDetails
-from .repository import BookingRepository
-from .value_object import BookingId, FlightNumber
-
-__all__ = [
-    "Booking",
-    "BookingId",
-    "BookingStatus",
-    "FlightNumber",
-    "BookingRepository",
-    "BookingFactory",
-    "FlightDetails",
-]
+from .entity import Booking as Booking
+from .enum import BookingStatus as BookingStatus
+from .factory import BookingFactory as BookingFactory
+from .factory import FlightDetails as FlightDetails
+from .repository import BookingRepository as BookingRepository
+from .value_object import BookingId as BookingId
+from .value_object import FlightNumber as FlightNumber
 ```
 
 ### 3.5 Domain Layer: Repository インターフェース
@@ -1337,11 +1318,9 @@ class Functions(Construct):
 
 ### infra/constructs/\_\_init\_\_.py (更新)
 ```python
-from .database import Database
-from .layers import Layers
-from .functions import Functions
-
-__all__ = ["Database", "Layers", "Functions"]
+from .database import Database as Database
+from .functions import Functions as Functions
+from .layers import Layers as Layers
 ```
 
 ### serverless_trip_saga_stack.py (更新)

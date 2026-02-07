@@ -73,10 +73,8 @@ class Layers(Construct):
 
 #### infra/constructs/\_\_init\_\_.py (更新)
 ```python
-from .database import Database
-from .layers import Layers
-
-__all__ = ["Database", "Layers"]
+from .database import Database as Database
+from .layers import Layers as Layers
 ```
 
 #### serverless_trip_saga_stack.py (更新)
@@ -269,23 +267,12 @@ services/shared/
 ### 5.5 `__init__.py` の更新 (`services/shared/domain/__init__.py`)
 
 ```python
-from .exceptions import (
-    DomainException,
-    ResourceNotFoundException,
-    BusinessRuleViolationException,
-)
-from .entity import Entity
-from .aggregate import AggregateRoot
-from .repository import Repository
-
-__all__ = [
-    "DomainException",
-    "ResourceNotFoundException",
-    "BusinessRuleViolationException",
-    "Entity",
-    "AggregateRoot",
-    "Repository",
-]
+from .aggregate import AggregateRoot as AggregateRoot
+from .entity import Entity as Entity
+from .exceptions import BusinessRuleViolationException as BusinessRuleViolationException
+from .exceptions import DomainException as DomainException
+from .exceptions import ResourceNotFoundException as ResourceNotFoundException
+from .repository import Repository as Repository
 ```
 
 ## 6. 次のステップ
