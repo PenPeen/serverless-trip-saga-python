@@ -1,3 +1,1 @@
-from .booking_repository import BookingRepository
-
-__all__ = ["BookingRepository"]
+from .booking_repository import BookingRepository as BookingRepository

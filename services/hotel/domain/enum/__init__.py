@@ -1,3 +1,1 @@
-from .hotel_booking_status import HotelBookingStatus
-
-__all__ = ["HotelBookingStatus"]
+from .hotel_booking_status import HotelBookingStatus as HotelBookingStatus

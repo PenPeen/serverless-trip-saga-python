@@ -1,3 +1,1 @@
-from .payment_repository import PaymentRepository
-
-__all__ = ["PaymentRepository"]
+from .payment_repository import PaymentRepository as PaymentRepository

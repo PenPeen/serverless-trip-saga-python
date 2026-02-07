@@ -1,4 +1,2 @@
-from .aggregate import AggregateRoot
-from .entity import Entity
-
-__all__ = ["Entity", "AggregateRoot"]
+from .aggregate import AggregateRoot as AggregateRoot
+from .entity import Entity as Entity

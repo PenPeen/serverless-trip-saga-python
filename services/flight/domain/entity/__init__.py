@@ -1,3 +1,1 @@
-from .booking import Booking
-
-__all__ = ["Booking"]
+from .booking import Booking as Booking

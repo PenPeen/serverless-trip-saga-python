@@ -1,3 +1,1 @@
-from .hotel_booking_repository import HotelBookingRepository
-
-__all__ = ["HotelBookingRepository"]
+from .hotel_booking_repository import HotelBookingRepository as HotelBookingRepository
