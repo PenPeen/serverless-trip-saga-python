@@ -10,6 +10,22 @@
 ## 定義フロー
 Start -> Reserve Flight -> Reserve Hotel -> Process Payment -> Succeed
 
+```mermaid
+sequenceDiagram
+    participant SF as Step Functions
+    participant F as Flight Lambda
+    participant H as Hotel Lambda
+    participant P as Payment Lambda
+
+    SF->>F: Reserve Flight
+    F-->>SF: Flight Reserved
+    SF->>H: Reserve Hotel
+    H-->>SF: Hotel Reserved
+    SF->>P: Process Payment
+    P-->>SF: Payment Processed
+    SF->>SF: Succeed
+```
+
 ## CDK実装
 * `tasks.LambdaInvoke` を使用してチェーン (`.next()`) を定義。
 * **データの受け渡し (Context Propagation)**:
@@ -119,7 +135,7 @@ class ServerlessTripSagaStack(Stack):
         layers = Layers(self, "Layers")
 
         # Functions Construct
-        functions = Functions(
+        fns = Functions(
             self, "Functions",
             table=database.table,
             common_layer=layers.common_layer,
@@ -128,7 +144,7 @@ class ServerlessTripSagaStack(Stack):
         # Orchestration Construct
         Orchestration(
             self, "Orchestration",
-            functions=functions,
+            functions=fns,
         )
 ```
 
