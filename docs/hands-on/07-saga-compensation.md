@@ -23,121 +23,111 @@ Hands-on 06 で作成した `Orchestration` Construct を拡張し、補償ト�
 ### infra/constructs/orchestration.py (更新)
 
 ```python
-from aws_cdk import (
-    aws_stepfunctions as sfn,
-    aws_stepfunctions_tasks as tasks,
-)
+from aws_cdk import aws_stepfunctions as sfn
+from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
 
 from infra.constructs.functions import Functions
 
 
 class Orchestration(Construct):
-    """Step Functions ステートマシンを管理する Construct"""
+    """Step Functions ステートマシーン"""
 
-    def __init__(
-        self,
-        scope: Construct,
-        id: str,
-        functions: Functions,
-    ) -> None:
+    def __init__(self, scope: Construct, id: str, functions: Functions):
         super().__init__(scope, id)
 
-        # ========================================================================
-        # 正常系タスク
-        # ========================================================================
+        # フライト予約
         reserve_flight_task = tasks.LambdaInvoke(
-            self, "ReserveFlight",
+            self,
+            "ReserveFlight",
             lambda_function=functions.flight_reserve,
+            retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
 
+        # ホテル予約
         reserve_hotel_task = tasks.LambdaInvoke(
-            self, "ReserveHotel",
+            self,
+            "ReserveHotel",
             lambda_function=functions.hotel_reserve,
+            retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
 
+        # 決済処理
         process_payment_task = tasks.LambdaInvoke(
-            self, "ProcessPayment",
+            self,
+            "ProcessPayment",
             lambda_function=functions.payment_process,
+            retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
 
-        # ========================================================================
-        # 補償タスク (Cancel)
-        # 注意: Step Functions では同じタスクを複数のチェーンで再利用できないため、
-        #       チェーンごとに別のタスクインスタンスを作成する
-        # ========================================================================
+        # 補償タスク
+        # NOTE: Step Functions では同じタスクを複数のチェーンで再利用できないため、
+        # ロールバックチェーンごとに別のタスクインスタンスを作成する
 
-        # Payment 失敗時のロールバック用
+        # Hotel の予約を取り消す
         cancel_hotel_from_payment = tasks.LambdaInvoke(
-            self, "CancelHotelFromPayment",
+            self,
+            "CancelHotelFromPayment",
             lambda_function=functions.hotel_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel_cancel",
         )
 
+        # Flight の予約を取り消す
         cancel_flight_from_payment = tasks.LambdaInvoke(
-            self, "CancelFlightFromPayment",
+            self,
+            "CancelFlightFromPayment",
             lambda_function=functions.flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
 
-        # Hotel 失敗時のロールバック用
+        # Flight の予約を取り消す
         cancel_flight_from_hotel = tasks.LambdaInvoke(
-            self, "CancelFlightFromHotel",
+            self,
+            "CancelFlightFromHotel",
             lambda_function=functions.flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
 
-        # ========================================================================
-        # 失敗ステート (チェーンごとに別インスタンス)
-        # ========================================================================
-        saga_failed_from_payment = sfn.Fail(self, "SagaFailedFromPayment", error="SagaFailed")
-        saga_failed_from_hotel = sfn.Fail(self, "SagaFailedFromHotel", error="SagaFailed")
-
-        # ========================================================================
-        # ロールバックチェーン
-        # ========================================================================
-        # Payment 失敗時: Hotel Cancel -> Flight Cancel -> Fail
-        rollback_from_payment = (
-            cancel_hotel_from_payment
-            .next(cancel_flight_from_payment)
-            .next(saga_failed_from_payment)
+        # 失敗State
+        saga_failed_from_payment = sfn.Fail(
+            self, "SagaFailedFromPayment", error="SagaFailed"
+        )
+        saga_failed_from_hotel = sfn.Fail(
+            self, "SagaFailedFromHotel", error="SagaFailed"
         )
 
-        # Hotel 失敗時: Flight Cancel -> Fail
+        # Payment 失敗時（Hotel Cancel → Flight Cancel → Fail）
+        rollback_from_payment = cancel_hotel_from_payment.next(
+            cancel_flight_from_payment
+        ).next(saga_failed_from_payment)
+
+        # Hotel 失敗時（Flight Cancel → Fail）
         rollback_from_hotel = cancel_flight_from_hotel.next(saga_failed_from_hotel)
 
-        # ========================================================================
-        # エラーハンドリング (add_catch)
-        # ========================================================================
+        # エラーハンドリング
         process_payment_task.add_catch(
-            rollback_from_payment,
-            result_path="$.error_info"
+            rollback_from_payment, result_path="$.error_info"
         )
 
         reserve_hotel_task.add_catch(
-            rollback_from_hotel,
-            result_path="$.error_info"
+            rollback_from_hotel, result_path="$.error_info"
         )
 
-        # ========================================================================
-        # State Machine Definition
-        # ========================================================================
-        definition = (
-            reserve_flight_task
-            .next(reserve_hotel_task)
-            .next(process_payment_task)
-            .next(sfn.Succeed(self, "BookingSucceeded"))
+        # ステートマシン定義
+        definition = reserve_flight_task.next(reserve_hotel_task).next(
+            process_payment_task.next(sfn.Succeed(self, "BookingSucceeded"))
         )
 
         self.state_machine = sfn.StateMachine(
-            self, "TripBookingStateMachine",
-            definition=definition,
+            self,
+            "TripBookingStateMachine",
+            definition_body=sfn.DefinitionBody.from_chainable(definition),
         )
 ```
 
