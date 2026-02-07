@@ -92,36 +92,36 @@ cdk list
 
 ```bash
 # アプリケーションコード格納用ルート
-mkdir -p services
+mkdir -p src/services
 
 # 1. Flight Service (フライト予約)
-mkdir -p services/flight/handlers
-mkdir -p services/flight/applications
-mkdir -p services/flight/domain
-mkdir -p services/flight/infrastructure
+mkdir -p src/services/flight/handlers
+mkdir -p src/services/flight/applications
+mkdir -p src/services/flight/domain
+mkdir -p src/services/flight/infrastructure
 
 # 2. Hotel Service (ホテル予約)
-mkdir -p services/hotel/handlers
-mkdir -p services/hotel/applications
-mkdir -p services/hotel/domain
-mkdir -p services/hotel/infrastructure
+mkdir -p src/services/hotel/handlers
+mkdir -p src/services/hotel/applications
+mkdir -p src/services/hotel/domain
+mkdir -p src/services/hotel/infrastructure
 
 # 3. Payment Service (決済)
-mkdir -p services/payment/handlers
-mkdir -p services/payment/applications
-mkdir -p services/payment/domain
-mkdir -p services/payment/infrastructure
+mkdir -p src/services/payment/handlers
+mkdir -p src/services/payment/applications
+mkdir -p src/services/payment/domain
+mkdir -p src/services/payment/infrastructure
 
 # 4. Shared Kernel (共通処理)
-mkdir -p services/shared/domain
-mkdir -p services/shared/utils
+mkdir -p src/services/shared/domain
+mkdir -p src/services/shared/utils
 
 # 各ディレクトリをPythonパッケージとして認識させるための __init__.py 作成
-find services -type d -exec touch {}/__init__.py \;
+find src/services -type d -exec touch {}/__init__.py \;
 ```
 
 ### 構成の説明
-*   **`services/`**: 全マイクロサービスのコードを格納。
+*   **`src/services/`**: 全マイクロサービスのコードを格納。
 *   **`handlers/`**: Lambdaのエントリーポイント（リクエスト受け付け）。
 *   **`applications/`**: ユースケースの調整役（ドメインとインフラの橋渡し）。
 *   **`domain/`**: 純粋なビジネスロジック（外部依存なし）。

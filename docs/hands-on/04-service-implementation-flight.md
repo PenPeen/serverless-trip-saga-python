@@ -19,7 +19,7 @@ DDD (ドメイン駆動設計) のレイヤー構造を適用し、Hands-on 03 �
 種別ごとにサブディレクトリを分けて整理します。
 
 ```
-services/shared/domain/
+src/services/shared/domain/
 ├── __init__.py                    # 全体の re-export
 ├── entity/
 │   ├── __init__.py
@@ -44,7 +44,7 @@ services/shared/domain/
 Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
 
 ```
-services/flight/
+src/services/flight/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
@@ -82,7 +82,7 @@ services/flight/
 
 まず、複数サービスで共通して使用する Value Object を実装します。
 
-#### TripId（`services/shared/domain/value_object/trip_id.py`）
+#### TripId（`src/services/shared/domain/value_object/trip_id.py`）
 
 全サービスで使用される旅行IDです。
 
@@ -107,7 +107,7 @@ class TripId:
         return self.value
 ```
 
-#### Currency（`services/shared/domain/value_object/currency.py`）
+#### Currency（`src/services/shared/domain/value_object/currency.py`）
 
 ISO 4217 に準拠した通貨コードを表現します。
 
@@ -143,7 +143,7 @@ class Currency:
         return cls("USD")
 ```
 
-#### Money（`services/shared/domain/value_object/money.py`）
+#### Money（`src/services/shared/domain/value_object/money.py`）
 
 金額と通貨を組み合わせた Value Object です。
 
@@ -188,7 +188,7 @@ class Money:
         return cls(amount=Decimal(str(amount)), currency=Currency.usd())
 ```
 
-#### IsoDateTime（`services/shared/domain/value_object/iso_date_time.py`）
+#### IsoDateTime（`src/services/shared/domain/value_object/iso_date_time.py`）
 
 ISO 8601 形式の日時を表現する Value Object です。
 内部では `datetime` 型を保持し、型安全性を確保します。
@@ -245,7 +245,7 @@ from .value_object import TripId as TripId
 
 ### 3.2 Flight 固有の Value Object
 
-#### BookingId（`services/flight/domain/value_object/booking_id.py`）
+#### BookingId（`src/services/flight/domain/value_object/booking_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -275,7 +275,7 @@ class BookingId:
         return cls(value=f"flight_for_{trip_id}")
 ```
 
-#### BookingStatus（`services/flight/domain/enum/booking_status.py`）
+#### BookingStatus（`src/services/flight/domain/enum/booking_status.py`）
 
 ```python
 from enum import Enum
@@ -288,7 +288,7 @@ class BookingStatus(str, Enum):
     CANCELLED = "CANCELLED"
 ```
 
-#### FlightNumber（`services/flight/domain/value_object/flight_number.py`）
+#### FlightNumber（`src/services/flight/domain/value_object/flight_number.py`）
 
 ```python
 import re
@@ -332,7 +332,7 @@ class FlightNumber:
 
 ### 3.3 Domain Layer: Booking AggregateRoot
 
-`services/flight/domain/entity/booking.py`
+`src/services/flight/domain/entity/booking.py`
 
 AggregateRoot は Value Object を使用してドメインの概念を表現します。
 Repository を持つドメインモデルは AggregateRoot を継承します。
@@ -431,7 +431,7 @@ from .value_object import FlightNumber as FlightNumber
 
 ### 3.5 Domain Layer: Repository インターフェース
 
-`services/flight/domain/repository/booking_repository.py`
+`src/services/flight/domain/repository/booking_repository.py`
 
 ```python
 from abc import abstractmethod
@@ -468,7 +468,7 @@ class BookingRepository(Repository[Booking, BookingId]):
 
 ### 3.6 Domain Layer: Factory パターン
 
-`services/flight/domain/factory/booking_factory.py`
+`src/services/flight/domain/factory/booking_factory.py`
 
 Factory はエンティティの生成ロジックをカプセル化します。
 
@@ -537,7 +537,7 @@ class BookingFactory:
 
 #### 3.7.1 基本実装
 
-`services/flight/infrastructure/dynamodb_booking_repository.py`
+`src/services/flight/infrastructure/dynamodb_booking_repository.py`
 
 ```python
 import os
@@ -691,7 +691,7 @@ self.table.put_item(
 
 #### 3.7.3 例外クラスの追加
 
-`services/shared/domain/exception/exceptions.py` に `DuplicateResourceException` を追加します。
+`src/services/shared/domain/exception/exceptions.py` に `DuplicateResourceException` を追加します。
 
 ```python
 class DomainException(Exception):
@@ -731,7 +731,7 @@ from .exception import (
 
 ### 3.8 Application Layer: 予約ユースケース
 
-`services/flight/applications/reserve_flight.py`
+`src/services/flight/applications/reserve_flight.py`
 
 ```python
 from services.shared.domain import TripId
@@ -778,7 +778,7 @@ class ReserveFlightService:
 
 ### 3.9 Handler Layer: リクエストバリデーション
 
-`services/flight/handlers/request_models.py`
+`src/services/flight/handlers/request_models.py`
 
 **Pydantic** を使用して入力スキーマを定義します。
 Handler 層でプリミティブ型を受け取り、Application 層に渡す前に Value Object に変換します。
@@ -862,7 +862,7 @@ class ReserveFlightRequest(BaseModel):
 
 ### 3.10 Handler Layer: Lambda エントリーポイント
 
-`services/flight/handlers/reserve.py`
+`src/services/flight/handlers/reserve.py`
 
 Handler 層では責務ごとにメソッドを分割し、`lambda_handler` をシンプルに保ちます。
 

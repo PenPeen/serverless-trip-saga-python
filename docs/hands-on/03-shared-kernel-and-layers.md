@@ -102,9 +102,9 @@ class ServerlessTripSagaStack(Stack):
 
 ## 3. Shared Kernel の実装 (共通コード)
 
-`services/shared` ディレクトリに、全サービスで利用するコードを実装します。
+`src/services/shared` ディレクトリに、全サービスで利用するコードを実装します。
 
-### 3.1 構造化ロギング設定 (`services/shared/utils/logger.py`)
+### 3.1 構造化ロギング設定 (`src/services/shared/utils/logger.py`)
 
 Powertools の Logger をラップし、共通の設定（サービス名の付与など）を行います。
 
@@ -115,7 +115,7 @@ def get_logger(service_name: str) -> Logger:
     return Logger(service=service_name)
 ```
 
-### 3.2 共通例外クラス (`services/shared/domain/exceptions.py`)
+### 3.2 共通例外クラス (`src/services/shared/domain/exceptions.py`)
 
 ビジネスロジックで発生するエラーを統一的に扱うための基底クラスです。
 
@@ -148,7 +148,7 @@ cdk deploy
 DDDの戦術的パターンを適用するための基盤クラスを実装します。
 これにより、各サービスで一貫したドメインモデルの構築が可能になります。
 
-### 5.1 Entity 基底クラス (`services/shared/domain/entity.py`)
+### 5.1 Entity 基底クラス (`src/services/shared/domain/entity.py`)
 
 エンティティは識別子（ID）によって同一性が決まるオブジェクトです。
 
@@ -182,7 +182,7 @@ class Entity(ABC, Generic[ID]):
         return hash(self._id)
 ```
 
-### 5.2 AggregateRoot 基底クラス (`services/shared/domain/aggregate.py`)
+### 5.2 AggregateRoot 基底クラス (`src/services/shared/domain/aggregate.py`)
 
 集約ルートは、関連するエンティティ群の一貫性境界を定義します。
 外部からのアクセスは必ず集約ルートを経由します。
@@ -217,7 +217,7 @@ class AggregateRoot(Entity[ID]):
         return events
 ```
 
-### 5.3 Repository 抽象基底クラス (`services/shared/domain/repository.py`)
+### 5.3 Repository 抽象基底クラス (`src/services/shared/domain/repository.py`)
 
 リポジトリは集約の永続化を抽象化します。
 ドメイン層ではインターフェースのみを定義し、具象実装は Infrastructure 層で行います（依存性逆転の原則）。
@@ -251,7 +251,7 @@ class Repository(ABC, Generic[T, ID]):
 ### 5.4 ディレクトリ構成の更新
 
 ```
-services/shared/
+src/services/shared/
 ├── __init__.py
 ├── domain/
 │   ├── __init__.py
@@ -264,7 +264,7 @@ services/shared/
     └── logger.py        # 3.1 で作成済み
 ```
 
-### 5.5 `__init__.py` の更新 (`services/shared/domain/__init__.py`)
+### 5.5 `__init__.py` の更新 (`src/services/shared/domain/__init__.py`)
 
 ```python
 from .aggregate import AggregateRoot as AggregateRoot

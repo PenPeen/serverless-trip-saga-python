@@ -27,7 +27,7 @@ module = ["constructs.*", "aws_cdk.*"]
 ignore_errors = true
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "src"]
 
 [tool.ruff]
 line-length = 88
