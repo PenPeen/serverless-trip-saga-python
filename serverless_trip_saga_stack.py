@@ -1,7 +1,7 @@
 from aws_cdk import Stack
 from constructs import Construct
 
-from infra.constructs import Database, Functions, Layers
+from infra.constructs import Database, Functions, Layers, Orchestration
 
 
 class ServerlessTripSagaStack(Stack):
@@ -15,9 +15,12 @@ class ServerlessTripSagaStack(Stack):
         layers = Layers(self, "Layers")
 
         # Functions Construct
-        Functions(
+        fns = Functions(
             self,
             "Functions",
             table=database.table,
             common_layer=layers.common_layer,
         )
+
+        # Orchestration Construct
+        Orchestration(self, "Orchestration", functions=fns)
