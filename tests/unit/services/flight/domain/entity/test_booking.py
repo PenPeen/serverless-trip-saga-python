@@ -12,31 +12,6 @@ from services.shared.domain.exception.exceptions import BusinessRuleViolationExc
 class TestBooking:
     """Booking Entity のテスト"""
 
-    @pytest.fixture
-    def create_booking(self):
-        """Bookingを生成するFactoryを返す"""
-
-        def _factory(
-            status: BookingStatus = BookingStatus.PENDING,
-            booking_id: str = "test-id",
-            trip_id: str = "trip-123",
-            flight_number: str = "NH001",
-            departure_time: str = "2024-01-01T10:00:00",
-            arrival_time: str = "2024-01-01T12:00:00",
-            price_amount: Decimal = Decimal("50000"),
-        ) -> Booking:
-            return Booking(
-                id=BookingId(value=booking_id),
-                trip_id=TripId(value=trip_id),
-                flight_number=FlightNumber(value=flight_number),
-                departure_time=IsoDateTime.from_string(departure_time),
-                arrival_time=IsoDateTime.from_string(arrival_time),
-                price=Money(amount=price_amount, currency=Currency.jpy()),
-                status=status,
-            )
-
-        return _factory
-
     def test_confirm_pending_booking(self, create_booking):
         """PENDING状態の予約をconfirmするとCONFIRMED状態になる"""
         booking = create_booking(status=BookingStatus.PENDING)

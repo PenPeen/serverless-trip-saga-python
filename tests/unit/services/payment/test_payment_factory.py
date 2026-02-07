@@ -3,13 +3,11 @@ from decimal import Decimal
 from services.payment.domain.entity.payment import Payment
 from services.payment.domain.enum.payment_status import PaymentStatus
 from services.payment.domain.factory.payment_factory import PaymentFactory
-from services.shared.domain import TripId
 
 
 class TestPaymentFactory:
-    def test_create_payment(self):
+    def test_create_payment(self, trip_id):
         factory = PaymentFactory()
-        trip_id = TripId(value="trip-123")
 
         payment = factory.create(
             trip_id=trip_id,

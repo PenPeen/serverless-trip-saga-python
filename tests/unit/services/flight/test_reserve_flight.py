@@ -1,26 +1,22 @@
 from decimal import Decimal
-from unittest.mock import MagicMock
 
 from services.flight.applications.reserve_flight import ReserveFlightService
 from services.flight.domain.entity.booking import Booking
 from services.flight.domain.enum.booking_status import BookingStatus
 from services.flight.domain.factory import BookingFactory
 from services.flight.domain.factory.booking_factory import FlightDetails
-from services.shared.domain.value_object.trip_id import TripId
 
 
 class TestReserveFlightService:
     """ReserveFlightService のテスト"""
 
-    def test_reserve_create_and_saves_booking(self):
+    def test_reserve_create_and_saves_booking(self, mock_repository, trip_id):
         """予約が作成され、Repository に保存され、Entity が返される"""
 
         # Arrange
-        mock_repository = MagicMock()
         factory = BookingFactory()
         service = ReserveFlightService(repository=mock_repository, factory=factory)
 
-        trip_id = TripId(value="trip-123")
         flight_details: FlightDetails = {
             "flight_number": "NH001",
             "departure_time": "2024-01-01T10:00:00",

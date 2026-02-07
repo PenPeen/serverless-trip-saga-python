@@ -6,13 +6,11 @@ from services.hotel.domain.factory.hotel_booking_factory import (
     HotelBookingFactory,
     HotelDetails,
 )
-from services.shared.domain import TripId
 
 
 class TestHotelBookingFactory:
-    def test_create_hotel_booking(self):
+    def test_create_hotel_booking(self, trip_id):
         factory = HotelBookingFactory()
-        trip_id = TripId(value="trip-123")
         hotel_details: HotelDetails = {
             "hotel_name": "Grand Hotel",
             "check_in_date": "2024-01-01",

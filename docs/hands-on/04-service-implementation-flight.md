@@ -1044,9 +1044,11 @@ Repository パターンを採用したことで、**DynamoDB への依存なし�
 ### 4.1 テストファイルの配置
 
 Value Object と Entity を分離したことで、テストも細かく分割できます。
+共通フィクスチャは `conftest.py` に配置し、テストコード間の重複を排除します。
 
 ```
 tests/unit/services/
+├── conftest.py                    ← 全サービス共通フィクスチャ（trip_id, mock_repository）
 ├── shared/
 │   └── domain/
 │       └── value_object/
@@ -1056,6 +1058,7 @@ tests/unit/services/
 │           ├── test_currency.py
 │           └── test_iso_date_time.py
 └── flight/
+    ├── conftest.py                ← Flight 固有フィクスチャ（create_booking）
     ├── __init__.py
     ├── domain/
     │   ├── entity/
@@ -1070,7 +1073,79 @@ tests/unit/services/
     └── test_reserve_flight.py
 ```
 
-### 4.2 Value Object のテスト（`test_flight_number.py`）
+### 4.2 共通フィクスチャの定義（`conftest.py`）
+
+pytest の `conftest.py` は、同一ディレクトリおよびサブディレクトリのテストから自動的に参照されるフィクスチャ定義ファイルです。
+テストガイドライン（`docs/02_testing_guidelines.md`）の「共通 fixture は `conftest.py` に配置」に従い、フィクスチャを一元管理します。
+
+#### 全サービス共通フィクスチャ（`tests/unit/services/conftest.py`）
+
+```python
+import pytest
+from unittest.mock import MagicMock
+
+from services.shared.domain.value_object.trip_id import TripId
+
+
+@pytest.fixture
+def trip_id():
+    """全テスト共通の TripId フィクスチャ"""
+    return TripId(value="trip-123")
+
+
+@pytest.fixture
+def mock_repository():
+    """リポジトリのモックフィクスチャ"""
+    return MagicMock()
+```
+
+- `trip_id`: 全サービスのテストで共通して使用する TripId
+- `mock_repository`: Application Service テストで使用する Repository のモック
+
+#### Flight 固有フィクスチャ（`tests/unit/services/flight/conftest.py`）
+
+```python
+import pytest
+from decimal import Decimal
+
+from services.flight.domain.entity import Booking
+from services.flight.domain.enum import BookingStatus
+from services.flight.domain.value_object import BookingId, FlightNumber
+from services.shared.domain import Currency, IsoDateTime, Money, TripId
+
+
+@pytest.fixture
+def create_booking():
+    """Booking を生成する Factory fixture（Factories as fixtures パターン）"""
+
+    def _factory(
+        status: BookingStatus = BookingStatus.PENDING,
+        booking_id: str = "test-id",
+        trip_id: str = "trip-123",
+        flight_number: str = "NH001",
+        departure_time: str = "2024-01-01T10:00:00",
+        arrival_time: str = "2024-01-01T12:00:00",
+        price_amount: Decimal = Decimal("50000"),
+    ) -> Booking:
+        return Booking(
+            id=BookingId(value=booking_id),
+            trip_id=TripId(value=trip_id),
+            flight_number=FlightNumber(value=flight_number),
+            departure_time=IsoDateTime.from_string(departure_time),
+            arrival_time=IsoDateTime.from_string(arrival_time),
+            price=Money(amount=price_amount, currency=Currency.jpy()),
+            status=status,
+        )
+
+    return _factory
+```
+
+「Factories as fixtures」パターンにより、オブジェクトそのものではなく「オブジェクトを作る関数」を返します。
+テストごとにパラメータを柔軟に変更できるため、Entity テストで特に有効です。
+
+参考: https://docs.pytest.org/en/stable/how-to/fixtures.html#factories-as-fixtures
+
+### 4.3 Value Object のテスト（`test_flight_number.py`）
 
 ```python
 import pytest
@@ -1099,111 +1174,80 @@ class TestFlightNumber:
             FlightNumber("INVALID")
 ```
 
-### 4.3 Entity のテスト（`test_booking.py`）
+### 4.4 Entity のテスト（`test_booking.py`）
 
-pytest の「Factories as fixtures」パターンを使用して、テストデータ生成用の fixture を定義します。
-fixture から**関数（Factory）を返す**ことで、テストごとにパラメータを柔軟に変更できます。
-
-参考: https://docs.pytest.org/en/stable/how-to/fixtures.html#factories-as-fixtures
+`conftest.py` に定義した `create_booking` フィクスチャを使用します。
+テストメソッドの引数に `create_booking` を指定するだけで、pytest が自動的に conftest.py から注入します。
 
 ```python
-import pytest
 from decimal import Decimal
 
-from services.shared.domain import TripId, Money, Currency, IsoDateTime
-from services.shared.domain.exception import BusinessRuleViolationException
+import pytest
 
 from services.flight.domain.entity import Booking
 from services.flight.domain.enum import BookingStatus
 from services.flight.domain.value_object import BookingId, FlightNumber
-
-
-@pytest.fixture
-def create_booking():
-    """Booking を生成する Factory を返す fixture
-
-    Factories as fixtures パターン:
-    オブジェクトそのものではなく「オブジェクトを作る関数」を返すことで、
-    テストごとにパラメータを柔軟に変更できる。
-    """
-    def _factory(
-        status: BookingStatus = BookingStatus.PENDING,
-        booking_id: str = "test-id",
-        trip_id: str = "trip-123",
-        flight_number: str = "NH001",
-        departure_time: str = "2024-01-01T10:00:00",
-        arrival_time: str = "2024-01-01T12:00:00",
-        price_amount: Decimal = Decimal("50000"),
-    ) -> Booking:
-        return Booking(
-            id=BookingId(value=booking_id),
-            trip_id=TripId(value=trip_id),
-            flight_number=FlightNumber(value=flight_number),
-            departure_time=IsoDateTime.from_string(departure_time),
-            arrival_time=IsoDateTime.from_string(arrival_time),
-            price=Money(amount=price_amount, currency=Currency.jpy()),
-            status=status,
-        )
-    return _factory
+from services.shared.domain import Currency, IsoDateTime, Money, TripId
+from services.shared.domain.exception.exceptions import BusinessRuleViolationException
 
 
 class TestBooking:
     """Booking Entity のテスト"""
 
     def test_confirm_pending_booking(self, create_booking):
-        """PENDING 状態の予約を確定できる"""
+        """PENDING状態の予約をconfirmするとCONFIRMED状態になる"""
         booking = create_booking(status=BookingStatus.PENDING)
         booking.confirm()
         assert booking.status == BookingStatus.CONFIRMED
 
     def test_cannot_confirm_cancelled_booking(self, create_booking):
-        """CANCELLED 状態の予約は確定できない"""
+        """CANCELLED状態の予約はconfirmできない"""
         booking = create_booking(status=BookingStatus.CANCELLED)
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
 
     def test_invalid_schedule_raises_error(self):
-        """出発時刻が到着時刻より後の場合はエラー"""
+        """出発時刻よりも到着時刻が前の場合、例外が発生する"""
+        departure_time = IsoDateTime.from_string("2024-01-01T12:00:00")
+        arrival_time = IsoDateTime.from_string("2024-01-01T10:00:00")
+
         with pytest.raises(BusinessRuleViolationException):
             Booking(
                 id=BookingId(value="test-id"),
                 trip_id=TripId(value="trip-123"),
                 flight_number=FlightNumber(value="NH001"),
-                departure_time=IsoDateTime.from_string("2024-01-01T12:00:00"),  # 後
-                arrival_time=IsoDateTime.from_string("2024-01-01T10:00:00"),    # 前
+                departure_time=departure_time,
+                arrival_time=arrival_time,
                 price=Money(amount=Decimal("50000"), currency=Currency.jpy()),
             )
 ```
 
-### 4.4 Application Service のテスト（`test_reserve_flight.py`）
+### 4.5 Application Service のテスト（`test_reserve_flight.py`）
+
+`conftest.py` の `mock_repository` と `trip_id` フィクスチャを使用します。
+テストメソッドの引数に指定するだけで、pytest が自動的に注入します。
 
 ```python
 from decimal import Decimal
-from unittest.mock import MagicMock
-
-from services.shared.domain import TripId
 
 from services.flight.applications.reserve_flight import ReserveFlightService
-from services.flight.domain.entity import Booking
-from services.flight.domain.enum import BookingStatus
+from services.flight.domain.entity.booking import Booking
+from services.flight.domain.enum.booking_status import BookingStatus
 from services.flight.domain.factory import BookingFactory
+from services.flight.domain.factory.booking_factory import FlightDetails
 
 
 class TestReserveFlightService:
     """ReserveFlightService のテスト"""
 
-    def test_reserve_creates_and_saves_booking(self):
+    def test_reserve_create_and_saves_booking(self, mock_repository, trip_id):
         """予約が作成され、Repository に保存され、Entity が返される"""
-        # Arrange
-        mock_repository = MagicMock()
-        factory = BookingFactory()
-        service = ReserveFlightService(
-            repository=mock_repository,
-            factory=factory,
-        )
 
-        trip_id = TripId(value="trip-123")
-        flight_details = {
+        # Arrange
+        factory = BookingFactory()
+        service = ReserveFlightService(repository=mock_repository, factory=factory)
+
+        flight_details: FlightDetails = {
             "flight_number": "NH001",
             "departure_time": "2024-01-01T10:00:00",
             "arrival_time": "2024-01-01T12:00:00",
@@ -1214,12 +1258,11 @@ class TestReserveFlightService:
         # Act
         booking = service.reserve(trip_id, flight_details)
 
-        # Assert: Entity が返されること
+        # Assert
         assert isinstance(booking, Booking)
         assert booking.trip_id == trip_id
         assert booking.status == BookingStatus.PENDING
 
-        # Assert: Repository.save が呼ばれたこと
         mock_repository.save.assert_called_once()
         saved_booking = mock_repository.save.call_args[0][0]
         assert saved_booking == booking

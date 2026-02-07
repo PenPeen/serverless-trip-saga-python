@@ -1137,9 +1137,11 @@ class Functions(Construct):
 ### テストファイル構造
 
 Value Object と Entity を分離したことで、テストも細かく分割できます。
+Hands-on 04 で作成した共通フィクスチャ（`conftest.py`）に加え、Hotel/Payment 固有のフィクスチャも `conftest.py` に配置します。
 
 ```
 tests/unit/services/
+├── conftest.py                    ← Hands-on 04 で作成済み（trip_id, mock_repository）
 ├── shared/
 │   └── domain/
 │       └── value_object/
@@ -1149,6 +1151,7 @@ tests/unit/services/
 │           ├── test_currency.py
 │           └── test_iso_date_time.py
 ├── hotel/
+│   ├── conftest.py                ← Hotel 固有フィクスチャ（create_hotel_booking）
 │   ├── __init__.py
 │   ├── domain/
 │   │   ├── entity/
@@ -1162,6 +1165,7 @@ tests/unit/services/
 │   ├── test_hotel_booking_factory.py
 │   └── test_reserve_hotel.py
 └── payment/
+    ├── conftest.py                ← Payment 固有フィクスチャ（create_payment）
     ├── __init__.py
     ├── domain/
     │   ├── entity/
