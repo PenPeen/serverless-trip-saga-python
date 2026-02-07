@@ -67,9 +67,7 @@ class Database(Construct):
 
 #### 2. infra/constructs/\_\_init\_\_.py
 ```python
-from .database import Database
-
-__all__ = ["Database"]
+from .database import Database as Database
 ```
 
 #### 3. serverless_trip_saga_stack.py

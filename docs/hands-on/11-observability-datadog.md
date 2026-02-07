@@ -63,18 +63,13 @@ class Observability(Construct):
 
 ### infra/constructs/\_\_init\_\_.py (更新)
 ```python
-from .database import Database
-from .layers import Layers
-from .functions import Functions
-from .orchestration import Orchestration
-from .api import Api
-from .deployment import Deployment
-from .observability import Observability
-
-__all__ = [
-    "Database", "Layers", "Functions", "Orchestration",
-    "Api", "Deployment", "Observability"
-]
+from .api import Api as Api
+from .database import Database as Database
+from .deployment import Deployment as Deployment
+from .functions import Functions as Functions
+from .layers import Layers as Layers
+from .observability import Observability as Observability
+from .orchestration import Orchestration as Orchestration
 ```
 
 ## ブランチとコミットメッセージ
