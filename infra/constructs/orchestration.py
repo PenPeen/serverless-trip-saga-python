@@ -40,5 +40,7 @@ class Orchestration(Construct):
         )
 
         self.state_machine = sfn.StateMachine(
-            self, "TripBookingStateMachine", definition=definition
+            self,
+            "TripBookingStateMachine",
+            definition_body=sfn.DefinitionBody.from_chainable(definition),
         )
