@@ -153,8 +153,8 @@ graph TD
     *   DynamoDB, SNS, SQSなどのAWSリソースへの具体的なアクセス実装（Repositoryの実装）。
     *   Domain層で定義されたインターフェース（Abstract Base Class）を実装します（依存性逆転の原則）。
 
-#### DynamoDB Design with Outbox Pattern & CQRS
-データの整合性とパフォーマンスを両立させるため、**Outbox Pattern** と **CQRS (Command Query Responsibility Segregation)** を採用します。
+#### DynamoDB Design with Outbox Pattern
+データの整合性とパフォーマンスを両立させるため、**Outbox Pattern** を採用します。
 
 ##### Single Table Design Schema
 すべてのデータを1つのテーブル `TripSagaTable` に格納します。Outboxパターンを採用するため、`OUTBOX` アイテムが追加されています。
@@ -172,16 +172,13 @@ graph TD
     *   基本的な検索要件（例: ステータスごとのフィルタリング）に対応するための汎用GSI。
     *   **Index Name:** `GSI1`
     *   **PK:** `GSI1PK` / **SK:** `GSI1SK`
-    *   *Note: 複雑な検索（全文検索や多重フィルタ）は、後述のCQRS Viewパターンで対応しますが、単純なアクセスパターンにはこのGSIを利用してオーバーヘッドを避けます。*
+    *   *Note: 複雑な検索（全文検索や多重フィルタ）は、将来的にView Tableや検索エンジンで対応する可能性がありますが、単純なアクセスパターンにはこのGSIを利用してオーバーヘッドを避けます。*
 
 *   **Transactional Writes & Outbox Pattern:**
     *   ドメインの状態変更（例: 予約確定）と、それに伴うイベント発行（例: 「予約確定イベント」）は、**DynamoDB TransactWriteItems** を用いて同一トランザクション内でアトミックにコミットします。
     *   イベントは `OUTBOX#{event_id}` アイテムとしてテーブル内に保存されます。
     *   **DynamoDB Streams** が `Outbox` アイテムの変更を検知し、後続のLambda（Dispatcher）が確実にイベントバス（EventBridge/SNS）へメッセージを発行します。これにより、分散システムにおける「二重書き込み問題」を回避します。
 
-*   **CQRS (Separation of Command and Query):**
-    *   **Command (Write):** 上記のSingle Table Designを用いた正規化されたデータ構造への書き込み。
-    *   **Query (Read):** 複雑な検索要件（例: 「過去1年間のキャンセル済み旅行一覧」）に対しては、DynamoDB Streamsをトリガーに、検索に最適化された **View Table (またはElasticsearch/OpenSearch)** を非同期に構築します。これにより、書き込みモデルへの負荷をかけずに柔軟な検索が可能になります。
 
 ### 2.3. Deployment Strategy: Canary Release via AWS CodeDeploy
 
