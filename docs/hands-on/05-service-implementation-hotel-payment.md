@@ -48,7 +48,7 @@ Hands-on 04 の Flight Service と同じパターンで実装します。
 Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
 
 ```
-services/hotel/
+src/services/hotel/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
@@ -85,7 +85,7 @@ services/hotel/
 
 ### 4.2 Hotel 固有の Value Object
 
-#### HotelBookingId（`services/hotel/domain/value_object/hotel_booking_id.py`）
+#### HotelBookingId（`src/services/hotel/domain/value_object/hotel_booking_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -113,7 +113,7 @@ class HotelBookingId:
         return cls(value=f"hotel_for_{trip_id}")
 ```
 
-#### HotelBookingStatus（`services/hotel/domain/enum/hotel_booking_status.py`）
+#### HotelBookingStatus（`src/services/hotel/domain/enum/hotel_booking_status.py`）
 
 > **Note:** enum は既にサブディレクトリで配置されています。
 
@@ -128,7 +128,7 @@ class HotelBookingStatus(str, Enum):
     CANCELLED = "CANCELLED"
 ```
 
-#### HotelName（`services/hotel/domain/value_object/hotel_name.py`）
+#### HotelName（`src/services/hotel/domain/value_object/hotel_name.py`）
 
 ```python
 from dataclasses import dataclass
@@ -152,7 +152,7 @@ class HotelName:
         return self.value
 ```
 
-#### StayPeriod（`services/hotel/domain/value_object/stay_period.py`）
+#### StayPeriod（`src/services/hotel/domain/value_object/stay_period.py`）
 
 ```python
 from dataclasses import dataclass
@@ -190,7 +190,7 @@ class StayPeriod:
 
 ### 4.3 Domain Layer: HotelBooking AggregateRoot
 
-`services/hotel/domain/entity/hotel_booking.py`
+`src/services/hotel/domain/entity/hotel_booking.py`
 
 ```python
 from services.shared.domain import AggregateRoot, TripId, Money
@@ -274,7 +274,7 @@ from .value_object import StayPeriod as StayPeriod
 
 ### 4.5 Domain Layer: Factory
 
-`services/hotel/domain/factory/hotel_booking_factory.py`
+`src/services/hotel/domain/factory/hotel_booking_factory.py`
 
 ```python
 from decimal import Decimal
@@ -331,7 +331,7 @@ class HotelBookingFactory:
 
 ### 4.6 Domain Layer: Repository インターフェース
 
-`services/hotel/domain/repository/hotel_booking_repository.py`
+`src/services/hotel/domain/repository/hotel_booking_repository.py`
 
 ```python
 from abc import abstractmethod
@@ -364,7 +364,7 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
 
 ### 4.7 Application Layer: 予約ユースケース
 
-`services/hotel/applications/reserve_hotel.py`
+`src/services/hotel/applications/reserve_hotel.py`
 
 ```python
 from services.shared.domain import TripId
@@ -406,7 +406,7 @@ class ReserveHotelService:
 
 ### 4.8 Handler Layer: リクエストバリデーション
 
-`services/hotel/handlers/request_models.py`
+`src/services/hotel/handlers/request_models.py`
 
 ```python
 from decimal import Decimal
@@ -469,7 +469,7 @@ class CancelHotelRequest(BaseModel):
 
 ### 4.8 Handler Layer: Lambda エントリーポイント
 
-`services/hotel/handlers/reserve.py`
+`src/services/hotel/handlers/reserve.py`
 
 Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、入出力を統一します。
 
@@ -603,7 +603,7 @@ def lambda_handler(event: ReserveHotelRequest, context: LambdaContext) -> dict:
 Value Object と Entity は種別ごとにサブディレクトリを分けて配置します。
 
 ```
-services/payment/
+src/services/payment/
 ├── __init__.py
 ├── handlers/
 │   ├── __init__.py
@@ -638,7 +638,7 @@ services/payment/
 
 ### 5.2 Payment 固有の Value Object
 
-#### PaymentId（`services/payment/domain/value_object/payment_id.py`）
+#### PaymentId（`src/services/payment/domain/value_object/payment_id.py`）
 
 ```python
 from dataclasses import dataclass
@@ -663,7 +663,7 @@ class PaymentId:
         return cls(value=f"payment_for_{trip_id}")
 ```
 
-#### PaymentStatus（`services/payment/domain/enum/payment_status.py`）
+#### PaymentStatus（`src/services/payment/domain/enum/payment_status.py`）
 
 ```python
 from enum import Enum
@@ -679,7 +679,7 @@ class PaymentStatus(str, Enum):
 
 ### 5.3 Domain Layer: Payment AggregateRoot
 
-`services/payment/domain/entity/payment.py`
+`src/services/payment/domain/entity/payment.py`
 
 ```python
 from services.shared.domain import AggregateRoot, TripId, Money
@@ -751,7 +751,7 @@ from .value_object import PaymentId as PaymentId
 
 ### 5.5 Domain Layer: Factory
 
-`services/payment/domain/factory/payment_factory.py`
+`src/services/payment/domain/factory/payment_factory.py`
 
 ```python
 from decimal import Decimal
@@ -793,7 +793,7 @@ class PaymentFactory:
 
 ### 5.6 Application Layer: 決済ユースケース
 
-`services/payment/applications/process_payment.py`
+`src/services/payment/applications/process_payment.py`
 
 ```python
 from decimal import Decimal
@@ -845,7 +845,7 @@ class ProcessPaymentService:
 
 ### 5.7 Handler Layer: リクエストバリデーション
 
-`services/payment/handlers/request_models.py`
+`src/services/payment/handlers/request_models.py`
 
 ```python
 from decimal import Decimal
@@ -884,7 +884,7 @@ class RefundPaymentRequest(BaseModel):
 
 ### 5.7 Handler Layer: Lambda エントリーポイント
 
-`services/payment/handlers/process.py`
+`src/services/payment/handlers/process.py`
 
 Hands-on 04 と同様に、Pydantic でレスポンスモデルを定義し、入出力を統一します。
 

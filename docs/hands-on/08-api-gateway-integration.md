@@ -64,7 +64,7 @@ class Database(Construct):
 ## 3. Query Service (参照系) の実装
 
 ### 3.1 Lambda実装
-`services/trip/handlers/` に以下の関数を実装します。
+`src/services/trip/handlers/` に以下の関数を実装します。
 
 1.  **`get_trip.py` (詳細取得)**:
     *   パスパラメータ `trip_id` を受け取る。

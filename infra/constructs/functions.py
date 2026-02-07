@@ -86,7 +86,7 @@ class Functions(Construct):
             id,
             runtime=_lambda.Runtime.PYTHON_3_14,
             handler=handler,
-            code=_lambda.Code.from_asset("."),
+            code=_lambda.Code.from_asset("src"),
             layers=[common_layer],
             environment={
                 "TABLE_NAME": table.table_name,
