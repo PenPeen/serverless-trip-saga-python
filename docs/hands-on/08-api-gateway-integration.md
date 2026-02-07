@@ -95,9 +95,7 @@ infra/
 ```python
 # infra/constructs/functions.py に追加
 
-        # ========================================================================
         # Trip Query Service Lambda (今回追加)
-        # ========================================================================
         self.get_trip = _lambda.Function(
             self, "GetTripLambda",
             runtime=_lambda.Runtime.PYTHON_3_14,
@@ -153,26 +151,20 @@ class Api(Construct):
     ) -> None:
         super().__init__(scope, id)
 
-        # ========================================================================
         # REST API 定義
-        # ========================================================================
         self.rest_api = apigateway.RestApi(
             self, "TripApi",
             rest_api_name="Trip Booking API",
         )
 
-        # ========================================================================
         # Step Functions 実行用 IAM Role
-        # ========================================================================
         sfn_role = iam.Role(
             self, "ApiGatewayStepFunctionsRole",
             assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
         )
         state_machine.grant_start_execution(sfn_role)
 
-        # ========================================================================
         # リソース定義
-        # ========================================================================
         trips_resource = self.rest_api.root.add_resource("trips")
         trip_resource = trips_resource.add_resource("{trip_id}")
 

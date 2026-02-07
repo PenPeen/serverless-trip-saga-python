@@ -52,9 +52,7 @@ class Deployment(Construct):
     ) -> None:
         super().__init__(scope, id)
 
-        # ========================================================================
         # Flight Reserve - カナリアデプロイ設定
-        # ========================================================================
         self.flight_reserve_alias = _lambda.Alias(
             self, "FlightReserveAlias",
             alias_name="Prod",
@@ -75,9 +73,7 @@ class Deployment(Construct):
             alarms=[flight_failure_alarm],
         )
 
-        # ========================================================================
         # Hotel Reserve - カナリアデプロイ設定
-        # ========================================================================
         self.hotel_reserve_alias = _lambda.Alias(
             self, "HotelReserveAlias",
             alias_name="Prod",
@@ -98,9 +94,7 @@ class Deployment(Construct):
             alarms=[hotel_failure_alarm],
         )
 
-        # ========================================================================
         # Payment Process - カナリアデプロイ設定
-        # ========================================================================
         self.payment_process_alias = _lambda.Alias(
             self, "PaymentProcessAlias",
             alias_name="Prod",
