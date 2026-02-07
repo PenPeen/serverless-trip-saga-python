@@ -1,11 +1,11 @@
 # Hands-on 08: API Gateway Integration & Query Service
 ## 目的
-* 外部アクセスのための API 構築 (Command & Query)
+* 外部アクセスのための API 構築（書き込み & 参照）
 * Step Functions への Service Integration (Command)
 * DynamoDB GSI を活用した参照系サービスの構築 (Query)
 
-## 1. アーキテクチャ概説 (CQRS Lite)
-書き込み (Command) と読み取り (Query) の責務を分離します。
+## 1. アーキテクチャ概説
+書き込み（予約作成）と読み取り（予約参照）で異なるAPIパスを使用します。
 * **Command (予約作成)**: API Gateway -> Step Functions (非同期)
 * **Query (予約参照)**: API Gateway -> Lambda -> DynamoDB (同期)
 
