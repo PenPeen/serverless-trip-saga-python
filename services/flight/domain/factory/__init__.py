@@ -1,3 +1,6 @@
-from .booking_factory import BookingFactory, FlightDetails
-
-__all__ = ["BookingFactory", "FlightDetails"]
+from .booking_factory import (
+    BookingFactory as BookingFactory,
+)
+from .booking_factory import (
+    FlightDetails as FlightDetails,
+)

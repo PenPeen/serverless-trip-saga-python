@@ -1,3 +1,1 @@
-from .payment_id import PaymentId
-
-__all__ = ["PaymentId"]
+from .payment_id import PaymentId as PaymentId
