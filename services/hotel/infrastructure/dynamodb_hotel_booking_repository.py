@@ -48,14 +48,17 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
 
     def find_by_id(self, booking_id: HotelBookingId) -> Optional[HotelBooking]:
         """予約IDで検索"""
-        response = self.table.scan(
-            FilterExpression="booking_id = :bid",
-            ExpressionAttributeValues={":bid": str(booking_id)},
+        trip_id = str(booking_id).removeprefix("hotel_for_")
+        response = self.table.get_item(
+            Key={
+                "PK": f"TRIP#{trip_id}",
+                "SK": f"HOTEL#{booking_id}",
+            }
         )
-        items = response.get("Items", [])
-        if not items:
+        item = response.get("Item")
+        if not item:
             return None
-        return self._to_entity(items[0])
+        return self._to_entity(item)
 
     def find_by_trip_id(self, trip_id: TripId) -> Optional[HotelBooking]:
         """Trip ID でホテル予約を検索する"""
