@@ -1,7 +1,7 @@
 # Hands-on 08: API Gateway Integration & Query Service
 
 ## 目的
-* 外部アクセスのための REST API 構築（書き込み & 参照）
+* 外部アクセスのための HTTP API 構築（書き込み & 参照）
 * Step Functions への Service Integration によるコマンド実行 (Command)
 * DynamoDB GSI を活用した参照系サービスの構築 (Query)
 
@@ -15,14 +15,14 @@
 ```
 Client
   │
-  ├── POST /trips ──────> API Gateway ──(AwsIntegration)──> Step Functions
+  ├── POST /trips ──────> HTTP API ──(StepFunctions統合)──> Step Functions
   │                                                            ├── Flight Lambda
   │                                                            ├── Hotel Lambda
   │                                                            └── Payment Lambda
   │
-  ├── GET /trips/{id} ──> API Gateway ──(LambdaIntegration)──> get_trip Lambda ──> DynamoDB (Query)
+  ├── GET /trips/{id} ──> HTTP API ──(Lambda統合)──> get_trip Lambda ──> DynamoDB (Query)
   │
-  └── GET /trips ───────> API Gateway ──(LambdaIntegration)──> list_trips Lambda ──> DynamoDB (GSI1 Query)
+  └── GET /trips ───────> HTTP API ──(Lambda統合)──> list_trips Lambda ──> DynamoDB (GSI1 Query)
 ```
 
 ### なぜ書き込みと読み取りで統合パターンが異なるのか
@@ -174,9 +174,8 @@ src/services/trip/
 パスパラメータ `trip_id` を受け取り、DynamoDB を `PK = TRIP#<trip_id>` で Query して
 関連する全アイテム（`FLIGHT`, `HOTEL`, `PAYMENT`）を取得・結合して返します。
 
-既存のハンドラーは Step Functions からのイベントを `@event_parser` で処理していますが、
-Query Lambda は **API Gateway Lambda Proxy Integration** からのイベントを受け取るため、
-Powertools の `@event_source` デコレータで `APIGatewayProxyEvent` として処理します。
+HTTP API はデフォルトでペイロード形式 v2 を使用するため、
+Powertools の `@event_source` デコレータで `APIGatewayProxyEventV2` として処理します。
 
 ```python
 import json
@@ -185,7 +184,7 @@ import os
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.data_classes import (
-    APIGatewayProxyEvent,
+    APIGatewayProxyEventV2,
     event_source,
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -198,11 +197,11 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 @logger.inject_lambda_context
-@event_source(data_class=APIGatewayProxyEvent)
-def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
+@event_source(data_class=APIGatewayProxyEventV2)
+def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dict:
     """予約詳細取得 Lambda ハンドラ
 
-    API Gateway Lambda Proxy Integration からのイベントを受け取り、
+    API Gateway HTTP API からのイベントを受け取り、
     DynamoDB をメインテーブルの PK で Query して旅行の全情報を返す。
     """
     path_params = event.path_parameters or {}
@@ -274,7 +273,7 @@ def _assemble_trip(trip_id: str, items: list[dict]) -> dict:
 
 
 def _response(status_code: int, body: dict) -> dict:
-    """API Gateway Lambda Proxy Integration のレスポンス形式を生成する"""
+    """API Gateway HTTP API のレスポンス形式を生成する"""
     return {
         "statusCode": status_code,
         "headers": {"Content-Type": "application/json"},
@@ -304,7 +303,7 @@ import os
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.data_classes import (
-    APIGatewayProxyEvent,
+    APIGatewayProxyEventV2,
     event_source,
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -317,11 +316,11 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 @logger.inject_lambda_context
-@event_source(data_class=APIGatewayProxyEvent)
-def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
+@event_source(data_class=APIGatewayProxyEventV2)
+def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dict:
     """予約一覧取得 Lambda ハンドラ
 
-    API Gateway Lambda Proxy Integration からのイベントを受け取り、
+    API Gateway HTTP API からのイベントを受け取り、
     DynamoDB の GSI1 を使って全予約の一覧を返す。
     """
     logger.info("Listing all trips")
@@ -362,7 +361,7 @@ def _deduplicate_trips(items: list[dict]) -> list[dict]:
 
 
 def _response(status_code: int, body: dict) -> dict:
-    """API Gateway Lambda Proxy Integration のレスポンス形式を生成する"""
+    """API Gateway HTTP API のレスポンス形式を生成する"""
     return {
         "statusCode": status_code,
         "headers": {"Content-Type": "application/json"},
@@ -522,16 +521,18 @@ class Functions(Construct):
 
 `infra/constructs/api.py` (新規作成)
 
+HTTP API を使用し、Step Functions 統合と Lambda 統合を構成します。
+
 ```python
-from aws_cdk import aws_apigateway as apigateway
-from aws_cdk import aws_iam as iam
+from aws_cdk import aws_apigatewayv2 as apigwv2
+from aws_cdk import aws_apigatewayv2_integrations as integrations
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_stepfunctions as sfn
 from constructs import Construct
 
 
 class Api(Construct):
-    """API Gateway を管理する Construct"""
+    """API Gateway Construct"""
 
     def __init__(
         self,
@@ -543,81 +544,53 @@ class Api(Construct):
     ) -> None:
         super().__init__(scope, id)
 
-        # REST API 定義
-        self.rest_api = apigateway.RestApi(
+        self.http_api = apigwv2.HttpApi(
             self,
             "TripApi",
-            rest_api_name="Trip Booking API",
-            deploy_options=apigateway.StageOptions(
-                metrics_enabled=True,
-                throttling_rate_limit=100,
-                throttling_burst_limit=200,
-            ),
+            api_name="Trip Booking API",
+            create_default_stage=False,
         )
 
-        # Step Functions 実行用 IAM Role
-        sfn_role = iam.Role(
+        apigwv2.HttpStage(
             self,
-            "ApiGatewayStepFunctionsRole",
-            assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
-        )
-        state_machine.grant_start_execution(sfn_role)
-
-        # リソース定義
-        trips_resource = self.rest_api.root.add_resource("trips")
-        trip_resource = trips_resource.add_resource("{trip_id}")
-
-        # ====================================================================
-        # POST /trips -> Step Functions (非同期)
-        # ====================================================================
-        trips_resource.add_method(
-            "POST",
-            apigateway.AwsIntegration(
-                service="states",
-                action="StartExecution",
-                options=apigateway.IntegrationOptions(
-                    credentials_role=sfn_role,
-                    request_templates={
-                        "application/json": (
-                            '{"stateMachineArn": "'
-                            + state_machine.state_machine_arn
-                            + '", "input": "$util.escapeJavaScript($input.body)"}'
-                        )
-                    },
-                    integration_responses=[
-                        apigateway.IntegrationResponse(status_code="200"),
-                        apigateway.IntegrationResponse(
-                            status_code="400",
-                            selection_pattern="4\\d{2}",
-                        ),
-                        apigateway.IntegrationResponse(
-                            status_code="500",
-                            selection_pattern="5\\d{2}",
-                        ),
-                    ],
-                ),
+            "DefaultStage",
+            http_api=self.http_api,
+            auto_deploy=True,
+            stage_name="$default",
+            throttle=apigwv2.ThrottleSettings(
+                burst_limit=10,
+                rate_limit=5,
             ),
-            method_responses=[
-                apigateway.MethodResponse(status_code="200"),
-                apigateway.MethodResponse(status_code="400"),
-                apigateway.MethodResponse(status_code="500"),
-            ],
         )
 
-        # ====================================================================
+        # POST /trips -> Step Functions (非同期)
+        self.http_api.add_routes(
+            path="/trips",
+            methods=[apigwv2.HttpMethod.POST],
+            integration=integrations.HttpStepFunctionsIntegration(
+                "StartExecution",
+                state_machine=state_machine,
+            ),
+        )
+
         # GET /trips -> Lambda (list_trips)
-        # ====================================================================
-        trips_resource.add_method(
-            "GET",
-            apigateway.LambdaIntegration(list_trips),
+        self.http_api.add_routes(
+            path="/trips",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=integrations.HttpLambdaIntegration(
+                "ListTripsIntegration",
+                handler=list_trips,
+            ),
         )
 
-        # ====================================================================
         # GET /trips/{trip_id} -> Lambda (get_trip)
-        # ====================================================================
-        trip_resource.add_method(
-            "GET",
-            apigateway.LambdaIntegration(get_trip),
+        self.http_api.add_routes(
+            path="/trips/{trip_id}",
+            methods=[apigwv2.HttpMethod.GET],
+            integration=integrations.HttpLambdaIntegration(
+                "GetTripIntegration",
+                handler=get_trip,
+            ),
         )
 ```
 
@@ -684,51 +657,15 @@ class ServerlessTripSagaStack(Stack):
 
 ## 6. Step Functions Integration (POST /trips) の詳細
 
-### AwsIntegration
+### HttpStepFunctionsIntegration
 
-Step Functions の `StartExecution` アクションを API Gateway から直接呼び出します。
+HTTP API の `HttpStepFunctionsIntegration` を使用して、Step Functions の `StartExecution` を API Gateway から直接呼び出します。
 Lambda を経由しないため、コールドスタートの影響を受けず、コストも削減されます。
 
-### VTL (Velocity Template Language) によるリクエスト変換
+REST API の `AwsIntegration` とは異なり、以下が自動的に管理されます:
 
-クライアントからの JSON ボディは文字列としてエスケープし、Step Functions の `input` パラメータに渡す必要があります。
-
-```python
-# request_templates の VTL テンプレートが生成するリクエスト:
-# {
-#   "stateMachineArn": "arn:aws:states:ap-northeast-1:123456789012:stateMachine:...",
-#   "input": "{\"trip_id\": \"abc-123\", \"flight_details\": {...}}"
-# }
-#
-# $util.escapeJavaScript($input.body) により、
-# クライアントの JSON ボディがエスケープされた文字列として渡される。
-```
-
-### エラーハンドリング (integration_responses / method_responses)
-
-`StartExecution` API 自体が失敗した場合（IAM 権限不足、無効な入力など）に備え、
-`integration_responses` で `selection_pattern` を使って HTTP ステータスコードをマッピングしています。
-
-* `4\\d{2}` — クライアントエラー（400系）をキャッチし `400` として返却
-* `5\\d{2}` — サーバーエラー（500系）をキャッチし `500` として返却
-
-`method_responses` にも対応するステータスコードを定義しないと、API Gateway がレスポンスを返せません。
-
-### deploy_options (メトリクス・スロットリング)
-
-`RestApi` の `deploy_options` で運用に必要な設定を行っています。
-
-* `metrics_enabled=True` — CloudWatch メトリクス（4XX/5XX エラー率、レイテンシ等）を有効化
-* `throttling_rate_limit` / `throttling_burst_limit` — API のレート制限を設定し、過負荷やコスト暴走を防止
-
-> **Note**: 本番環境ではさらに `logging_level=apigateway.MethodLoggingLevel.INFO` を設定して
-> 実行ログを有効化することを推奨します。ただし、これには**アカウントレベルで API Gateway 用の
-> CloudWatch Logs IAM ロール**が事前に設定されている必要があります（`apigateway.CfnAccount`）。
-> 未設定の場合、デプロイ時にエラーとなるため、本ハンズオンでは省略しています。
-
-### IAM Role
-
-`grant_start_execution()` により、API Gateway が Step Functions の `StartExecution` を呼び出す権限を自動付与します。
+* **IAM ロール**: CDK が Step Functions 実行用の IAM ロールを自動作成・付与するため、手動でのロール定義が不要
+* **リクエスト変換**: VTL テンプレートによるリクエスト変換が不要
 
 ### 非同期 API の挙動 (Asynchronous Pattern)
 
@@ -752,7 +689,7 @@ cdk deploy
 
 ```bash
 # API Gateway の URL を取得（cdk deploy の出力から）
-API_URL="https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
+API_URL="https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com"
 
 # 予約リクエスト
 curl -X POST "${API_URL}/trips" \

@@ -4,7 +4,7 @@ import os
 import boto3
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.data_classes import (
-    APIGatewayProxyEvent,
+    APIGatewayProxyEventV2,
     event_source,
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -17,8 +17,8 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 @logger.inject_lambda_context
-@event_source(data_class=APIGatewayProxyEvent)
-def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
+@event_source(data_class=APIGatewayProxyEventV2)
+def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dict:
     """予約詳細取得 Lambda Handler"""
 
     path_params = event.path_parameters or {}
