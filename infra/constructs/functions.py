@@ -73,6 +73,25 @@ class Functions(Construct):
         ]:
             table.grant_read_write_data(fn)
 
+        self.get_trip = self._create_function(
+            "GetTripLambda",
+            "services.trip.handlers.get_trip.lambda_handler",
+            "trip-service",
+            table,
+            common_layer,
+        )
+
+        self.list_trips = self._create_function(
+            "ListTripsLambda",
+            "services.trip.handlers.list_trips.lambda_handler",
+            "trip-service",
+            table,
+            common_layer,
+        )
+
+        table.grant_read_data(self.get_trip)
+        table.grant_read_data(self.list_trips)
+
     def _create_function(
         self,
         id: str,
