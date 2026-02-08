@@ -22,7 +22,7 @@ Client
   │
   ├── GET /trips/{id} ──> API Gateway ──(LambdaIntegration)──> get_trip Lambda ──> DynamoDB (Query)
   │
-  └── GET /trips ───────> API Gateway ──(LambdaIntegration)──> list_trips Lambda ──> DynamoDB (GSI Query)
+  └── GET /trips ───────> API Gateway ──(LambdaIntegration)──> list_trips Lambda ──> DynamoDB (GSI1 Query)
 ```
 
 ### なぜ書き込みと読み取りで統合パターンが異なるのか
@@ -32,15 +32,15 @@ Client
 
 ## 2. DynamoDB GSI の追加 (参照要件への対応)
 
-検索機能（ユーザーごとの予約履歴取得など）を実現するため、保留にしていた GSI を追加します。
+予約一覧の取得機能を実現するため、保留にしていた GSI を追加します。
 
 ### infra/constructs/database.py (更新)
 
 `Database` Construct に Global Secondary Index (GSI) を追加します。
 
 *   **Index Name**: `GSI1`
-*   **Partition Key**: `GSI1PK` (String) - 例: `USER#<user_id>`
-*   **Sort Key**: `GSI1SK` (String) - 例: `DATE#<iso_timestamp>`
+*   **Partition Key**: `GSI1PK` (String) - 固定値 `TRIPS`（全予約を同一パーティションに集約）
+*   **Sort Key**: `GSI1SK` (String) - 例: `TRIP#<trip_id>`
 
 ```python
 from aws_cdk import RemovalPolicy
@@ -81,7 +81,75 @@ class Database(Construct):
 
 > **Note**: GSI を追加しただけでは、既存アイテムに `GSI1PK` / `GSI1SK` 属性は付与されません。
 > `list_trips` が結果を返すためには、各サービスの Repository でアイテム保存時に GSI 属性を書き込む必要があります。
-> これは今後のハンズオンで対応します。本ハンズオンでは `get_trip`（メインテーブルの Query）が主な動作確認対象です。
+> 次のセクションで対応します。
+
+### 各 Repository に GSI 属性を追加
+
+GSI にアイテムを投影するため、各サービスの Repository の `save` メソッドで保存する `item` に
+`GSI1PK` と `GSI1SK` を追加します。
+
+#### src/services/flight/infrastructure/dynamodb_booking_repository.py (更新)
+
+`save` メソッドの `item` に以下の2行を追加します。
+
+```python
+        item = {
+            "PK": f"TRIP#{booking.trip_id}",
+            "SK": f"FLIGHT#{booking.id}",
+            "entity_type": "FLIGHT",
+            "booking_id": str(booking.id),
+            "trip_id": str(booking.trip_id),
+            "flight_number": str(booking.flight_number),
+            "departure_time": str(booking.departure_time),
+            "arrival_time": str(booking.arrival_time),
+            "price_amount": str(booking.price.amount),
+            "price_currency": str(booking.price.currency),
+            "status": booking.status.value,
+            "GSI1PK": "TRIPS",                       # 追加
+            "GSI1SK": f"TRIP#{booking.trip_id}",      # 追加
+        }
+```
+
+#### src/services/hotel/infrastructure/dynamodb_hotel_booking_repository.py (更新)
+
+```python
+        item = {
+            "PK": f"TRIP#{booking.trip_id}",
+            "SK": f"HOTEL#{booking.id}",
+            "entity_type": "HOTEL",
+            "booking_id": str(booking.id),
+            "trip_id": str(booking.trip_id),
+            "hotel_name": str(booking.hotel_name),
+            "check_in_date": booking.stay_period.check_in,
+            "check_out_date": booking.stay_period.check_out,
+            "price_amount": str(booking.price.amount),
+            "price_currency": str(booking.price.currency),
+            "status": booking.status.value,
+            "GSI1PK": "TRIPS",                       # 追加
+            "GSI1SK": f"TRIP#{booking.trip_id}",      # 追加
+        }
+```
+
+#### src/services/payment/infrastructure/dynamodb_payment_repository.py (更新)
+
+```python
+        item = {
+            "PK": f"TRIP#{payment.trip_id}",
+            "SK": f"PAYMENT#{payment.id}",
+            "entity_type": "PAYMENT",
+            "payment_id": str(payment.id),
+            "trip_id": str(payment.trip_id),
+            "amount": str(payment.amount.amount),
+            "currency": str(payment.amount.currency),
+            "status": payment.status.value,
+            "GSI1PK": "TRIPS",                       # 追加
+            "GSI1SK": f"TRIP#{payment.trip_id}",      # 追加
+        }
+```
+
+> **Note**: 3つの Repository すべてに同じ `GSI1PK` / `GSI1SK` を追加しています。
+> 1つの `trip_id` に対して FLIGHT・HOTEL・PAYMENT の3アイテムが GSI に投影されるため、
+> `list_trips` Lambda 側で `trip_id` による重複排除を行います。
 
 ## 3. Query Service (参照系) の実装
 
@@ -225,8 +293,9 @@ DynamoDB は数値型を Python の `Decimal` として返します。
 
 `src/services/trip/handlers/list_trips.py`
 
-クエリパラメータ `user_id` を受け取り、`GSI1` を使って
-`GSI1PK = USER#<user_id>` で Query してユーザーの予約一覧を返します。
+`GSI1` を使って `GSI1PK = "TRIPS"` で Query し、全予約の一覧を返します。
+1つの `trip_id` に対して FLIGHT・HOTEL・PAYMENT の3アイテムが GSI に存在するため、
+`trip_id` で重複排除してから返却します。
 
 ```python
 import json
@@ -253,25 +322,19 @@ def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
     """予約一覧取得 Lambda ハンドラ
 
     API Gateway Lambda Proxy Integration からのイベントを受け取り、
-    DynamoDB の GSI1 を使ってユーザーの予約一覧を返す。
+    DynamoDB の GSI1 を使って全予約の一覧を返す。
     """
-    query_params = event.query_string_parameters or {}
-    user_id = query_params.get("user_id")
-
-    if not user_id:
-        return _response(400, {"message": "user_id query parameter is required"})
-
-    logger.info("Listing trips for user", extra={"user_id": user_id})
+    logger.info("Listing all trips")
 
     try:
         response = table.query(
             IndexName="GSI1",
             KeyConditionExpression="GSI1PK = :pk",
-            ExpressionAttributeValues={":pk": f"USER#{user_id}"},
+            ExpressionAttributeValues={":pk": "TRIPS"},
         )
 
         items = response.get("Items", [])
-        trips = [_to_trip_summary(item) for item in items]
+        trips = _deduplicate_trips(items)
         return _response(200, {"trips": trips, "count": len(trips)})
 
     except Exception:
@@ -279,13 +342,23 @@ def lambda_handler(event: APIGatewayProxyEvent, context: LambdaContext) -> dict:
         return _response(500, {"message": "Internal server error"})
 
 
-def _to_trip_summary(item: dict) -> dict:
-    """DynamoDB アイテムを一覧用のサマリー形式に変換する"""
-    return {
-        "trip_id": item.get("trip_id", ""),
-        "status": item.get("status", ""),
-        "created_at": item.get("GSI1SK", "").removeprefix("DATE#"),
-    }
+def _deduplicate_trips(items: list[dict]) -> list[dict]:
+    """GSI から取得したアイテムを trip_id で重複排除する
+
+    1つの trip_id に対して FLIGHT・HOTEL・PAYMENT の3アイテムが存在するため、
+    trip_id の重複を排除して一覧を返す。
+    各サービスの詳細ステータスは GET /trips/{trip_id} で確認する。
+    """
+    seen: set[str] = set()
+    trips: list[dict] = []
+
+    for item in items:
+        trip_id = item.get("trip_id", "")
+        if trip_id and trip_id not in seen:
+            seen.add(trip_id)
+            trips.append({"trip_id": trip_id})
+
+    return trips
 
 
 def _response(status_code: int, body: dict) -> dict:
@@ -296,10 +369,6 @@ def _response(status_code: int, body: dict) -> dict:
         "body": json.dumps(body, default=str),
     }
 ```
-
-> **Note**: `list_trips` が結果を返すためには、DynamoDB のアイテムに `GSI1PK` (`USER#<user_id>`) と `GSI1SK` (`DATE#<timestamp>`) 属性が設定されている必要があります。
-> 現時点の各サービス Repository ではこれらの属性を書き込んでいないため、`list_trips` は空の結果を返します。
-> GSI 属性の書き込みは、各 Repository の `save` メソッドに `GSI1PK` / `GSI1SK` を追加することで対応します。
 
 ## 4. API Gateway の構築
 
@@ -611,7 +680,7 @@ class ServerlessTripSagaStack(Stack):
 | :--- | :--- | :--- | :--- |
 | `POST` | `/trips` | **Step Functions** (`StartExecution`) | 予約プロセスの開始 (非同期) |
 | `GET` | `/trips/{trip_id}` | **Lambda** (`get_trip`) | 予約詳細の取得 |
-| `GET` | `/trips` | **Lambda** (`list_trips`) | ユーザーの予約一覧取得 |
+| `GET` | `/trips` | **Lambda** (`list_trips`) | 全予約の一覧取得 |
 
 ## 6. Step Functions Integration (POST /trips) の詳細
 
@@ -735,13 +804,16 @@ curl "${API_URL}/trips/trip-test-001"
 ### 7.3 予約一覧取得 (GET /trips)
 
 ```bash
-curl "${API_URL}/trips?user_id=test_user"
+curl "${API_URL}/trips"
 
-# レスポンス例 (GSI 属性未設定の場合):
-# {"trips": [], "count": 0}
+# レスポンス例:
+# {
+#   "trips": [
+#     {"trip_id": "trip-test-001"}
+#   ],
+#   "count": 1
+# }
 ```
-
-> **Note**: 一覧取得は GSI1 属性が書き込まれるまで空の結果を返します。
 
 ## 8. 次のステップ
 
