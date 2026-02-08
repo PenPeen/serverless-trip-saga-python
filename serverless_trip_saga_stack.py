@@ -1,7 +1,7 @@
 from aws_cdk import Stack
 from constructs import Construct
 
-from infra.constructs import Database, Functions, Layers, Orchestration
+from infra.constructs import Api, Database, Functions, Layers, Orchestration
 
 
 class ServerlessTripSagaStack(Stack):
@@ -23,4 +23,12 @@ class ServerlessTripSagaStack(Stack):
         )
 
         # Orchestration Construct
-        Orchestration(self, "Orchestration", functions=fns)
+        orchestration = Orchestration(self, "Orchestration", functions=fns)
+
+        Api(
+            self,
+            "Api",
+            state_machine=orchestration.state_machine,
+            get_trip=fns.get_trip,
+            list_trips=fns.list_trips,
+        )
