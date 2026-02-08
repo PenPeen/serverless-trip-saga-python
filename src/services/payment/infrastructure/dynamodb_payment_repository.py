@@ -32,6 +32,8 @@ class DynamoDBPaymentRepository(PaymentRepository):
             "amount": str(payment.amount.amount),
             "currency": str(payment.amount.currency),
             "status": payment.status.value,
+            "GSI1PK": "TRIPS",
+            "GSI1SK": f"TRIP#{payment.trip_id}",
         }
         try:
             self.table.put_item(
