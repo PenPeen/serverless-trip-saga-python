@@ -1,6 +1,5 @@
 import os
 from decimal import Decimal
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,7 +15,7 @@ from services.shared.domain.exception.exceptions import DuplicateResourceExcepti
 class DynamoDBPaymentRepository(PaymentRepository):
     """DynamoDBを使用したPaymentRepository の具象実装"""
 
-    def __init__(self, table_name: Optional[str] = None) -> None:
+    def __init__(self, table_name: str | None = None) -> None:
         self.table_name = table_name or os.getenv("TABLE_NAME")
         self.dynamodb = boto3.resource("dynamodb")
         self.table = self.dynamodb.Table(self.table_name)
@@ -45,7 +44,7 @@ class DynamoDBPaymentRepository(PaymentRepository):
                     f"Payment already exists: {payment.id}"
                 )
 
-    def find_by_id(self, payment_id: PaymentId) -> Optional[Payment]:
+    def find_by_id(self, payment_id: PaymentId) -> Payment | None:
         """決済IDで検索"""
         response = self.table.scan(
             FilterExpression="payment_id = :pid",
@@ -56,7 +55,7 @@ class DynamoDBPaymentRepository(PaymentRepository):
             return None
         return self._to_entity(items[0])
 
-    def find_by_trip_id(self, trip_id: TripId) -> Optional[Payment]:
+    def find_by_trip_id(self, trip_id: TripId) -> Payment | None:
         """Trip ID で決済を検索する"""
         response = self.table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",

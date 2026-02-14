@@ -1,6 +1,5 @@
 import os
 from decimal import Decimal
-from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -16,7 +15,7 @@ from services.shared.domain.exception.exceptions import DuplicateResourceExcepti
 class DynamoDBHotelBookingRepository(HotelBookingRepository):
     """DynamoDBを使用したHotelBookingRepository の具象実装"""
 
-    def __init__(self, table_name: Optional[str] = None) -> None:
+    def __init__(self, table_name: str | None = None) -> None:
         self.table_name = table_name or os.getenv("TABLE_NAME")
         self.dynamodb = boto3.resource("dynamodb")
         self.table = self.dynamodb.Table(self.table_name)
@@ -48,7 +47,7 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
                     f"Hotel booking already exists: {booking.id}"
                 )
 
-    def find_by_id(self, booking_id: HotelBookingId) -> Optional[HotelBooking]:
+    def find_by_id(self, booking_id: HotelBookingId) -> HotelBooking | None:
         """予約IDで検索"""
         trip_id = str(booking_id).removeprefix("hotel_for_")
         response = self.table.get_item(
@@ -62,7 +61,7 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
             return None
         return self._to_entity(item)
 
-    def find_by_trip_id(self, trip_id: TripId) -> Optional[HotelBooking]:
+    def find_by_trip_id(self, trip_id: TripId) -> HotelBooking | None:
         """Trip ID でホテル予約を検索する"""
         response = self.table.query(
             KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",
