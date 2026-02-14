@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from services.flight.domain.entity import Booking
 from services.flight.domain.value_object import BookingId
@@ -15,11 +14,11 @@ class BookingRepository(Repository[Booking, BookingId]):
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_id(self, booking_id: BookingId) -> Optional[Booking]:
+    def find_by_id(self, booking_id: BookingId) -> Booking | None:
         """予約IDで検索"""
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, tripId: TripId) -> Optional[Booking]:
+    def find_by_trip_id(self, tripId: TripId) -> Booking | None:
         """TripIDで検索"""
         raise NotImplementedError

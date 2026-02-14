@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 T = TypeVar("T")
 ID = TypeVar("ID")
@@ -17,6 +17,6 @@ class Repository(ABC, Generic[T, ID]):
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_id(self, id: ID) -> Optional[T]:
+    def find_by_id(self, id: ID) -> T | None:
         """IDで集約を検索する"""
         raise NotImplementedError
