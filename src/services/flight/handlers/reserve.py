@@ -9,7 +9,6 @@ from services.flight.domain.factory.booking_factory import FlightDetails
 from services.flight.handlers.request_models import ReserveFlightRequest
 from services.flight.handlers.response_models import (
     BookingData,
-    ErrorResponse,
     SuccessResponse,
 )
 from services.flight.infrastructure.dynamodb_booking_repository import (
@@ -38,14 +37,10 @@ def lambda_handler(event: ReserveFlightRequest, context: LambdaContext) -> dict:
 
     logger.info("Received reserve flight request")
 
-    try:
-        trip_id = TripId(value=event.trip_id)
-        flight_details = _to_flight_details(event)
-        booking = service.reserve(trip_id, flight_details)
-        return _to_response(booking)
-    except Exception as e:
-        logger.exception("Failed to reserve flight")
-        return _error_response("INTERNAL_ERROR", str(e))
+    trip_id = TripId(value=event.trip_id)
+    flight_details = _to_flight_details(event)
+    booking = service.reserve(trip_id, flight_details)
+    return _to_response(booking)
 
 
 def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
@@ -74,12 +69,3 @@ def _to_response(booking: Booking) -> dict:
             status=booking.status.value,
         )
     ).model_dump()
-
-
-def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
-    """エラーレスポンスを生成"""
-    return ErrorResponse(
-        error_code=error_code,
-        message=message,
-        details=details,
-    ).model_dump(exclude_none=True)
