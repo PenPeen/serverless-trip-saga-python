@@ -46,9 +46,11 @@ class PipelineStack(Stack):
                 ),
                 install_commands=[
                     "npm install -g aws-cdk",
-                    "pip install uv",
+                    "curl -LsSf https://astral.sh/uv/install.sh | sh",
+                    'export PATH="$HOME/.local/bin:$PATH"',
                 ],
                 commands=[
+                    'export PATH="$HOME/.local/bin:$PATH"',
                     "uv sync --frozen",
                     "uv run pytest tests/unit",
                     "uv run cdk synth",
