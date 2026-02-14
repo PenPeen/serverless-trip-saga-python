@@ -1,3 +1,5 @@
+import datetime
+
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as _lambda
 from constructs import Construct
@@ -110,5 +112,6 @@ class Functions(Construct):
             environment={
                 "TABLE_NAME": table.table_name,
                 "POWERTOOLS_SERVICE_NAME": service_name,
+                "DEPLOY_TIME": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             },
         )

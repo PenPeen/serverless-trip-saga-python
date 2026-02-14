@@ -1,7 +1,7 @@
 from aws_cdk import Stack
 from constructs import Construct
 
-from infra.constructs import Api, Database, Functions, Layers, Orchestration
+from infra.constructs import Api, Database, Deployment, Functions, Layers, Orchestration
 
 
 class ServerlessTripSagaStack(Stack):
@@ -22,8 +22,25 @@ class ServerlessTripSagaStack(Stack):
             common_layer=layers.common_layer,
         )
 
-        # Orchestration Construct
-        orchestration = Orchestration(self, "Orchestration", functions=fns)
+        # Deployment Construct (カナリアデプロイ)
+        deployment = Deployment(
+            self,
+            "Deployment",
+            flight_reserve=fns.flight_reserve,
+            hotel_reserve=fns.hotel_reserve,
+            payment_process=fns.payment_process,
+        )
+
+        # Orchestration Construct (Alias を使用)
+        orchestration = Orchestration(
+            self,
+            "Orchestration",
+            flight_reserve=deployment.flight_reserve_alias,
+            flight_cancel=fns.flight_cancel,
+            hotel_reserve=deployment.hotel_reserve_alias,
+            hotel_cancel=fns.hotel_cancel,
+            payment_process=deployment.payment_process_alias,
+        )
 
         Api(
             self,
