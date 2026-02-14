@@ -119,46 +119,6 @@ class Deployment(Construct):
 *   カナリアデプロイ中に補償関数が失敗すると、サガが不整合な状態に陥るリスクがある。
 *   補償関数の品質は、CI パイプラインのユニットテストで担保する。
 
-### infra/constructs/functions.py (更新)
-
-`DEPLOY_TIME` 環境変数を追加します。CDK の `current_version` には、コード変更がないにもかかわらず「A version for this Lambda function exists」エラーが発生する既知の問題があります。デプロイ毎に変化する環境変数を追加することで、確実に新しいバージョンが作成されるようにします。
-
-```python
-import datetime
-
-from aws_cdk import aws_dynamodb as dynamodb
-from aws_cdk import aws_lambda as _lambda
-from constructs import Construct
-
-
-class Functions(Construct):
-    """Lambda 関数を管理する Construct"""
-
-    # ... 省略 ...
-
-    def _create_function(
-        self,
-        id: str,
-        handler: str,
-        service_name: str,
-        table: dynamodb.Table,
-        common_layer: _lambda.LayerVersion,
-    ) -> _lambda.Function:
-        return _lambda.Function(
-            self,
-            id,
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler=handler,
-            code=_lambda.Code.from_asset("src"),
-            layers=[common_layer],
-            environment={
-                "TABLE_NAME": table.table_name,
-                "POWERTOOLS_SERVICE_NAME": service_name,
-                "DEPLOY_TIME": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-            },
-        )
-```
-
 ### infra/constructs/orchestration.py (更新)
 
 `Functions` オブジェクトを丸ごと受け取る設計から、個別の関数参照を受け取る設計に変更します。型を `IFunction` にすることで、`Function` と `Alias` の両方を受け取れるようにします。
