@@ -46,7 +46,7 @@ class PipelineStack(Stack):
                 ),
                 install_commands=[
                     "npm install -g aws-cdk",
-                    "curl -LsSf https://astral.sh/uv/install.sh | sh",
+                    "curl -LsSf https://astral.sh/uv/0.10.2/install.sh | sh",
                     'export PATH="$HOME/.local/bin:$PATH"',
                 ],
                 commands=[
