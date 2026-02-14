@@ -1,7 +1,5 @@
 from aws_cdk import (
     CfnStack,
-    RemovalPolicy,
-    SecretValue,
 )
 from aws_cdk import (
     aws_lambda as _lambda,
@@ -19,10 +17,9 @@ from datadog_cdk_constructs_v2 import DatadogLambda, DatadogStepFunctions
 class Observability(Construct):
     """可観測性を管理する Construct (Datadog版)
 
-    SSM Parameter Store の API Key を起点に、以下を自己完結的に構築する:
-    1. Secrets Manager Secret (SSM SecureString から動的参照)
-    2. Datadog Forwarder (公式 CloudFormation テンプレートを CfnStack でデプロイ)
-    3. Lambda / Step Functions の Datadog 計装
+    事前に Secrets Manager へ格納された API Key を起点に、以下を自己完結的に構築する:
+    1. Datadog Forwarder (公式 CloudFormation テンプレートを CfnStack でデプロイ)
+    2. Lambda / Step Functions の Datadog 計装
     """
 
     def __init__(
@@ -31,22 +28,17 @@ class Observability(Construct):
         id: str,
         functions: list[_lambda.Function],
         state_machine: sfn.StateMachine,
-        datadog_api_key_ssm_parameter_name: str = (
-            "/serverless-trip-saga/datadog-api-key"
-        ),
+        datadog_api_key_secret_name: str = "/serverless-trip-saga/datadog-api-key",
         service_name: str = "serverless-trip-saga",
         env: str = "dev",
     ) -> None:
         super().__init__(scope, id)
 
-        # 1. Secrets Manager Secret の作成
-        api_key_secret = secretsmanager.Secret(
+        # 1. 既存の Secrets Manager Secret を参照
+        api_key_secret = secretsmanager.Secret.from_secret_name_v2(
             self,
             "DatadogApiKeySecret",
-            secret_string_value=SecretValue.ssm_secure(
-                datadog_api_key_ssm_parameter_name
-            ),
-            removal_policy=RemovalPolicy.DESTROY,
+            secret_name=datadog_api_key_secret_name,
         )
 
         # 2. Datadog Forwarder のデプロイ (Nested Stack)
