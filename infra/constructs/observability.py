@@ -50,6 +50,9 @@ class Observability(Construct):
                 "DdApiKeySecretArn": api_key_secret.secret_arn,
                 "DdSite": "ap1.datadoghq.com",
                 "FunctionName": f"{service_name}-datadog-forwarder",
+                "DdTraceEnabled": "true",
+                "DdFetchLambdaTags": "true",
+                "DdFetchStepFunctionsTags": "true",
             },
         )
 
@@ -72,6 +75,10 @@ class Observability(Construct):
             env=env,
         )
         datadog_lambda.add_lambda_functions(functions)
+
+        # Extension が Secrets Manager から API Key を取得するための権限付与
+        for fn in functions:
+            api_key_secret.grant_read(fn)
 
         # 4. Step Functions の計装
         datadog_sfn = DatadogStepFunctions(
