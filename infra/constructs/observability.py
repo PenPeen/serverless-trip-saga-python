@@ -76,6 +76,10 @@ class Observability(Construct):
         )
         datadog_lambda.add_lambda_functions(functions)
 
+        # Extension が Secrets Manager から API Key を取得するための権限付与
+        for fn in functions:
+            api_key_secret.grant_read(fn)
+
         # 4. Step Functions の計装
         datadog_sfn = DatadogStepFunctions(
             self,
