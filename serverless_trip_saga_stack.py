@@ -1,20 +1,24 @@
 from aws_cdk import Stack
 from constructs import Construct
 
-from infra.constructs import Api, Database, Deployment, Functions, Layers, Orchestration
+from infra.constructs import (
+    Api,
+    Database,
+    Deployment,
+    Functions,
+    Layers,
+    Observability,
+    Orchestration,
+)
 
 
 class ServerlessTripSagaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Database Construct
         database = Database(self, "Database")
-
-        # Layers Construct
         layers = Layers(self, "Layers")
 
-        # Functions Construct
         fns = Functions(
             self,
             "Functions",
@@ -22,7 +26,6 @@ class ServerlessTripSagaStack(Stack):
             common_layer=layers.common_layer,
         )
 
-        # Deployment Construct (カナリアデプロイ)
         deployment = Deployment(
             self,
             "Deployment",
@@ -31,7 +34,6 @@ class ServerlessTripSagaStack(Stack):
             payment_process=fns.payment_process,
         )
 
-        # Orchestration Construct (Alias を使用)
         orchestration = Orchestration(
             self,
             "Orchestration",
@@ -48,4 +50,11 @@ class ServerlessTripSagaStack(Stack):
             state_machine=orchestration.state_machine,
             get_trip=fns.get_trip,
             list_trips=fns.list_trips,
+        )
+
+        Observability(
+            self,
+            "Observability",
+            functions=fns.all_functions,
+            state_machine=orchestration.state_machine,
         )

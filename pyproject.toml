@@ -47,4 +47,5 @@ dev = [
     "boto3",
     "boto3-stubs[dynamodb]",
     "mypy",
+    "datadog-cdk-constructs-v2>=1.0.0",
 ]
