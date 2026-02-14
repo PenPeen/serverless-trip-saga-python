@@ -7,7 +7,6 @@ from services.payment.domain.entity import Payment
 from services.payment.domain.factory import PaymentFactory
 from services.payment.handlers.request_models import ProcessPaymentRequest
 from services.payment.handlers.response_models import (
-    ErrorResponse,
     PaymentData,
     SuccessResponse,
 )
@@ -36,30 +35,16 @@ def _to_response(payment: Payment) -> dict:
     ).model_dump()
 
 
-def _error_response(error_code: str, message: str, details: list | None = None) -> dict:
-    """エラーレスポンスを生成"""
-    return ErrorResponse(
-        error_code=error_code,
-        message=message,
-        details=details,
-    ).model_dump(exclude_none=True)
-
-
 @logger.inject_lambda_context
 @event_parser(model=ProcessPaymentRequest)
 def lambda_handler(event: ProcessPaymentRequest, context: LambdaContext) -> dict:
     """決済処理のLambdaハンドラー"""
     logger.info("Received process payment request")
 
-    try:
-        trip_id = TripId(value=event.trip_id)
-        payment = service.process(
-            trip_id=trip_id,
-            amount=event.amount,
-            currency_code=event.currency,
-        )
-        return _to_response(payment)
-
-    except Exception as e:
-        logger.exception("Failed to process payment")
-        return _error_response("INTERNAL_ERROR", str(e))
+    trip_id = TripId(value=event.trip_id)
+    payment = service.process(
+        trip_id=trip_id,
+        amount=event.amount,
+        currency_code=event.currency,
+    )
+    return _to_response(payment)
