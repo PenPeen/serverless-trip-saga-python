@@ -45,7 +45,7 @@ class PipelineStack(Stack):
                 env={"PYENV_VERSION": "3.12"},
                 commands=[
                     "npm install -g aws-cdk",
-                    "pip install -r requirements.txt",
+                    "pip install .",
                     "pip install -r layers/common_layer/requirements.txt",
                     "pytest tests/unit",
                     "cdk synth",
