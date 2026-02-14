@@ -44,13 +44,14 @@ class PipelineStack(Stack):
                     "main",
                     connection_arn=github_connection.attr_connection_arn,
                 ),
-                env={"PYENV_VERSION": "3.12"},
-                commands=[
+                install_commands=[
                     "npm install -g aws-cdk",
-                    "pip install .",
-                    "pip install -r layers/common_layer/requirements.txt",
-                    "pytest tests/unit",
-                    "cdk synth",
+                    "pip install uv",
+                ],
+                commands=[
+                    "uv sync --frozen",
+                    "uv run pytest tests/unit",
+                    "uv run cdk synth",
                 ],
             ),
         )
