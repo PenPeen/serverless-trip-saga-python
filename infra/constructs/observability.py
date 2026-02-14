@@ -50,6 +50,9 @@ class Observability(Construct):
                 "DdApiKeySecretArn": api_key_secret.secret_arn,
                 "DdSite": "ap1.datadoghq.com",
                 "FunctionName": f"{service_name}-datadog-forwarder",
+                "DdTraceEnabled": "true",
+                "DdFetchLambdaTags": "true",
+                "DdFetchStepFunctionsTags": "true",
             },
         )
 
