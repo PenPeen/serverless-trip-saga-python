@@ -1,21 +1,29 @@
+from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
-
-from infra.constructs.functions import Functions
 
 
 class Orchestration(Construct):
     """Step Functions ステートマシーン"""
 
-    def __init__(self, scope: Construct, id: str, functions: Functions):
+    def __init__(
+        self,
+        scope: Construct,
+        id: str,
+        flight_reserve: _lambda.IFunction,
+        flight_cancel: _lambda.IFunction,
+        hotel_reserve: _lambda.IFunction,
+        hotel_cancel: _lambda.IFunction,
+        payment_process: _lambda.IFunction,
+    ):
         super().__init__(scope, id)
 
         # フライト予約
         reserve_flight_task = tasks.LambdaInvoke(
             self,
             "ReserveFlight",
-            lambda_function=functions.flight_reserve,
+            lambda_function=flight_reserve,
             retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
@@ -24,7 +32,7 @@ class Orchestration(Construct):
         reserve_hotel_task = tasks.LambdaInvoke(
             self,
             "ReserveHotel",
-            lambda_function=functions.hotel_reserve,
+            lambda_function=hotel_reserve,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
@@ -33,7 +41,7 @@ class Orchestration(Construct):
         process_payment_task = tasks.LambdaInvoke(
             self,
             "ProcessPayment",
-            lambda_function=functions.payment_process,
+            lambda_function=payment_process,
             retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
@@ -46,7 +54,7 @@ class Orchestration(Construct):
         cancel_hotel_from_payment = tasks.LambdaInvoke(
             self,
             "CancelHotelFromPayment",
-            lambda_function=functions.hotel_cancel,
+            lambda_function=hotel_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel_cancel",
         )
@@ -55,7 +63,7 @@ class Orchestration(Construct):
         cancel_flight_from_payment = tasks.LambdaInvoke(
             self,
             "CancelFlightFromPayment",
-            lambda_function=functions.flight_cancel,
+            lambda_function=flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
@@ -64,7 +72,7 @@ class Orchestration(Construct):
         cancel_flight_from_hotel = tasks.LambdaInvoke(
             self,
             "CancelFlightFromHotel",
-            lambda_function=functions.flight_cancel,
+            lambda_function=flight_cancel,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
