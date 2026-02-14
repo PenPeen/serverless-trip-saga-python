@@ -48,7 +48,7 @@ class Observability(Construct):
             template_url="https://datadog-cloudformation-template.s3.amazonaws.com/aws/forwarder/latest.yaml",
             parameters={
                 "DdApiKeySecretArn": api_key_secret.secret_arn,
-                "DdSite": "datadoghq.com",
+                "DdSite": "ap1.datadoghq.com",
                 "FunctionName": f"{service_name}-datadog-forwarder",
             },
         )
@@ -67,7 +67,7 @@ class Observability(Construct):
             enable_datadog_tracing=True,
             enable_datadog_logs=True,
             capture_lambda_payload=True,
-            site="datadoghq.com",
+            site="ap1.datadoghq.com",
             service=service_name,
             env=env,
         )
