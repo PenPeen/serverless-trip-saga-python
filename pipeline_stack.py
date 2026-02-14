@@ -2,6 +2,8 @@ from aws_cdk import (
     Stack,
     Stage,
     pipelines,
+)
+from aws_cdk import (
     aws_codestarconnections as codestarconnections,
 )
 from constructs import Construct
