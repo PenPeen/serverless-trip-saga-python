@@ -324,6 +324,22 @@ wheels = [
 ]
 
 [[package]]
+name = "datadog-cdk-constructs-v2"
+version = "3.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aws-cdk-lib" },
+    { name = "constructs" },
+    { name = "jsii" },
+    { name = "publication" },
+    { name = "typeguard" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/10/c0/d3c46af9c4836361720faa58af13b9d3116618312465ca6136a766089980/datadog_cdk_constructs_v2-3.9.0.tar.gz", hash = "sha256:ec0f5984b603903f812608615423301665ef377487fc424209f0f9ce39796000", size = 1478105, upload-time = "2026-02-04T17:49:10.049Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8b/f0/cdff8b737d3671d096f215c7e7165d18ccb6d343e426d5d02ce00ad6c1c7/datadog_cdk_constructs_v2-3.9.0-py3-none-any.whl", hash = "sha256:e4ab51aaf51577209e60bef5e13c1afff0204a7758293f1f2c1c9eb55fe9bc7c", size = 1452805, upload-time = "2026-02-04T17:49:08.786Z" },
+]
+
+[[package]]
 name = "distlib"
 version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -766,6 +782,7 @@ dev = [
     { name = "boto3" },
     { name = "boto3-stubs", extra = ["dynamodb"] },
     { name = "constructs" },
+    { name = "datadog-cdk-constructs-v2" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -784,6 +801,7 @@ dev = [
     { name = "boto3" },
     { name = "boto3-stubs", extras = ["dynamodb"] },
     { name = "constructs", specifier = ">=10.0.0,<11.0.0" },
+    { name = "datadog-cdk-constructs-v2", specifier = ">=1.0.0" },
     { name = "mypy" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "pytest", specifier = ">=8.4.2" },

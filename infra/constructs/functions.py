@@ -92,6 +92,17 @@ class Functions(Construct):
         table.grant_read_data(self.get_trip)
         table.grant_read_data(self.list_trips)
 
+        self.all_functions = [
+            self.flight_reserve,
+            self.flight_cancel,
+            self.hotel_reserve,
+            self.hotel_cancel,
+            self.payment_process,
+            self.payment_refund,
+            self.get_trip,
+            self.list_trips,
+        ]
+
     def _create_function(
         self,
         id: str,
