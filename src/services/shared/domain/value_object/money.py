@@ -8,7 +8,7 @@ from .currency import Currency
 
 @dataclass(frozen=True)
 class Money:
-    """金額（通過情報含む）"""
+    """金額（通貨情報含む）"""
 
     amount: Decimal
     currency: Currency
