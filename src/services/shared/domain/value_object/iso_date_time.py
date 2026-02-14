@@ -19,7 +19,7 @@ class IsoDateTime:
             raise ValueError(f"Invalid ISO 8601 datetime: {s}") from e
         return cls(value=dt)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.value
 
     def is_before(self, other: IsoDateTime) -> bool:
