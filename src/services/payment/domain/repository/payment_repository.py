@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import Optional
 
 from services.payment.domain.entity.payment import Payment
 from services.payment.domain.value_object.payment_id import PaymentId
@@ -15,11 +14,11 @@ class PaymentRepository(Repository[Payment, PaymentId]):
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_id(self, payment_id: PaymentId) -> Optional[Payment]:
+    def find_by_id(self, payment_id: PaymentId) -> Payment | None:
         """決済IDで検索する"""
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, trip_id: TripId) -> Optional[Payment]:
+    def find_by_trip_id(self, trip_id: TripId) -> Payment | None:
         """Trip ID で検索する"""
         raise NotImplementedError
