@@ -3,14 +3,16 @@
 本ハンズオンの第一歩として、AWS CDKを用いたPythonプロジェクトの初期化を行い、ドメイン駆動設計 (DDD) に適したディレクトリ構造をセットアップします。
 
 ## 1. 目的
+*   **モダンな開発環境の構築**: 従来の `pip` + `venv` ではなく、高速かつ統合的なパッケージマネージャーである **uv** を採用し、再現性の高い開発環境を構築します。
 *   AWS CDK (Python) の開発環境を整える。
-*   プロジェクトの依存ライブラリをインストールする。
 *   将来的な拡張（マイクロサービス化）に備えた、明確なレイヤー構造を作成する。
 
 ## 2. 前提条件 (Prerequisites)
 以下のツールがインストールされていることを確認してください。
 
-*   **Python 3.14 以上**: `python --version`
+*   **uv**: `uv --version` (最新のPythonパッケージマネージャー)
+    *   インストール: `curl -LsSf https://astral.sh/uv/install.sh | sh` (macOS/Linux)
+*   **Python 3.14**: `uv python install 3.14` (uv経由で管理します)
 *   **Node.js 18 以上**: `node --version`
 *   **AWS CLI**: `aws --version` (かつ `aws configure` で認証情報が設定済みであること)
 *   **AWS CDK CLI**: `cdk --version`
@@ -35,50 +37,52 @@ rm source.bat
 
 実行後、`app.py` や `cdk.json` などが生成されていることを確認します。
 
-## 4. 仮想環境と依存ライブラリのセットアップ
+## 4. 仮想環境と依存ライブラリのセットアップ (uv)
 
-Pythonの仮想環境を有効化し、必要なライブラリをインストールします。
+`uv` を使用して、Pythonのバージョン管理、仮想環境の作成、依存関係のインストールを一元管理します。
 
-### 4.1 仮想環境の有効化
+### 4.1 プロジェクトの初期化とPythonバージョンの固定
 
 ```bash
-# Mac / Linux
-source .venv/bin/activate
+# Python 3.14 をプロジェクトで使用するように固定
+uv python pin 3.14
+```
+これにより `.python-version` ファイルが作成されます。
 
-# Windows (参考)
-# .venv\Scripts\activate
+### 4.2 依存ライブラリの定義 (`pyproject.toml`)
+
+`pyproject.toml` を編集し、必要なライブラリを追加します。
+`uv` では `uv add` コマンドで依存関係を追加するのが推奨されますが、初期セットアップとして以下のコマンドを実行します。
+
+```bash
+# ランタイム依存関係の追加
+uv add "aws-cdk-lib>=2.114.1" "constructs>=10.0.0" "aws-lambda-powertools[all]" "pydantic>=2.0.0"
+
+# 開発用依存関係の追加 (テスト、Lintツールなど)
+uv add --dev pytest ruff boto3 "boto3-stubs[dynamodb]" mypy
 ```
 
-### 4.2 依存ライブラリの定義
+これにより `pyproject.toml` と `uv.lock` が自動的に更新されます。
 
-プロジェクトルートにある `requirements.txt` を編集し、以下のライブラリを追加します。
-これらはAWS Lambdaの実装や型定義に必要となります。
+### 4.3 Lambda Layer用 requirements.txt の準備
 
-**`requirements.txt`**:
+Lambda Layerの構築には `requirements.txt` が必要となります。
+`pyproject.toml` で管理されている依存関係のうち、Lambda実行時に必要なもの（ランタイム依存）のみを抽出して記述します。
+
+**`layers/common_layer/requirements.txt`**:
 ```text
-aws-cdk-lib==2.114.1
-constructs>=10.0.0
-aws-lambda-powertools
+aws-lambda-powertools[all]
 pydantic>=2.0.0
-pytest
 ```
-
-*   `aws-lambda-powertools`: ログ出力、冪等性などのユーティリティ。
-*   `pydantic`: データバリデーション用。
-*   `pytest`: テスト用フレームワーク。
-
-### 4.3 インストール
-
-```bash
-pip install -r requirements.txt
-```
+※ `uv export` を用いて生成することも可能ですが、ここでは最小限の構成を手動で定義します。
 
 ### 4.4 動作確認
 
 CDKが正しく動作するか確認します。
+`uv run` を使うことで、仮想環境を明示的に activate することなくコマンドを実行できます。
 
 ```bash
-cdk list
+uv run cdk list
 ```
 
 エラーが出ずにスタック名（例: `ServerlessTripSagaPythonStack`）が表示されればOKです。
@@ -136,4 +140,4 @@ find src/services -type d -exec touch {}/__init__.py \;
 ## ブランチとコミットメッセージ
 
 *   **ブランチ名**: `feature/project-setup`
-*   **コミットメッセージ**: `プロジェクト構成のセットアップ`
+*   **コミットメッセージ**: `プロジェクト構成のセットアップ (uv移行)`
