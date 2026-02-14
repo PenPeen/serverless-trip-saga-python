@@ -20,7 +20,7 @@ class IsoDateTime:
         return cls(value=dt)
 
     def __str__(self) -> str:
-        return self.value
+        return self.value.isoformat()
 
     def is_before(self, other: IsoDateTime) -> bool:
         """他の日時より前かどうか"""
