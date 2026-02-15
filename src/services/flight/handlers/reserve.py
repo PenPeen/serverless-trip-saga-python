@@ -1,5 +1,4 @@
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from services.flight.applications.reserve_flight import ReserveFlightService
@@ -25,20 +24,21 @@ service = ReserveFlightService(repository=repository, factory=factory)
 
 
 @logger.inject_lambda_context
-@event_parser(model=ReserveFlightRequest)
-def lambda_handler(event: ReserveFlightRequest, context: LambdaContext) -> dict:
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """フライト予約 Lambda Handler
 
-    Step Functions からの入力を受け取り、
-    @event_parser デコレータで自動バリデーション後、フライト予約処理を実行する。
-    バリデーションエラーは ValidationError として raise され、
-    Step Functions でハンドリング可能。
+    Step Functions からの入力を受け取り、フライト予約処理を実行する。
+    payload にはDatadog トレースマージ用のコンテキストが含まれるため、
+    Payload キーからビジネスデータを取り出してバリデーションする。
     """
 
     logger.info("Received reserve flight request")
 
-    trip_id = TripId(value=event.trip_id)
-    flight_details = _to_flight_details(event)
+    payload = event.get("Payload", event)
+    request = ReserveFlightRequest.model_validate(payload)
+
+    trip_id = TripId(value=request.trip_id)
+    flight_details = _to_flight_details(request)
     booking = service.reserve(trip_id, flight_details)
     return _to_response(booking)
 

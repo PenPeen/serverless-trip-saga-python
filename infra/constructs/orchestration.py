@@ -2,6 +2,7 @@ from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_stepfunctions as sfn
 from aws_cdk import aws_stepfunctions_tasks as tasks
 from constructs import Construct
+from datadog_cdk_constructs_v2 import DatadogStepFunctions
 
 
 class Orchestration(Construct):
@@ -19,11 +20,18 @@ class Orchestration(Construct):
     ):
         super().__init__(scope, id)
 
+        _payload = sfn.TaskInput.from_object(
+            DatadogStepFunctions.build_lambda_payload_to_merge_traces(
+                {"Payload.$": "$"}
+            )
+        )
+
         # フライト予約
         reserve_flight_task = tasks.LambdaInvoke(
             self,
             "ReserveFlight",
             lambda_function=flight_reserve,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
@@ -33,6 +41,7 @@ class Orchestration(Construct):
             self,
             "ReserveHotel",
             lambda_function=hotel_reserve,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
@@ -42,6 +51,7 @@ class Orchestration(Construct):
             self,
             "ProcessPayment",
             lambda_function=payment_process,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
@@ -55,6 +65,7 @@ class Orchestration(Construct):
             self,
             "CancelHotelFromPayment",
             lambda_function=hotel_cancel,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel_cancel",
         )
@@ -64,6 +75,7 @@ class Orchestration(Construct):
             self,
             "CancelFlightFromPayment",
             lambda_function=flight_cancel,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
@@ -73,6 +85,7 @@ class Orchestration(Construct):
             self,
             "CancelFlightFromHotel",
             lambda_function=flight_cancel,
+            payload=_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
