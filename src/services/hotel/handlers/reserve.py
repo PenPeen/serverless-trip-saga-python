@@ -1,5 +1,4 @@
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from services.hotel.applications.reserve_hotel import ReserveHotelService
@@ -42,18 +41,20 @@ def _to_response(booking: HotelBooking) -> dict:
 
 
 @logger.inject_lambda_context
-@event_parser(model=ReserveHotelRequest)
-def lambda_handler(event: ReserveHotelRequest, context: LambdaContext) -> dict:
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """ホテル予約 Lambda ハンドラ"""
     logger.info("Received reserve hotel request")
 
-    trip_id = TripId(value=event.trip_id)
+    payload = event.get("Payload", event)
+    request = ReserveHotelRequest.model_validate(payload)
+
+    trip_id = TripId(value=request.trip_id)
     hotel_details: HotelDetails = {
-        "hotel_name": event.hotel_details.hotel_name,
-        "check_in_date": event.hotel_details.check_in_date,
-        "check_out_date": event.hotel_details.check_out_date,
-        "price_amount": event.hotel_details.price_amount,
-        "price_currency": event.hotel_details.price_currency,
+        "hotel_name": request.hotel_details.hotel_name,
+        "check_in_date": request.hotel_details.check_in_date,
+        "check_out_date": request.hotel_details.check_out_date,
+        "price_amount": request.hotel_details.price_amount,
+        "price_currency": request.hotel_details.price_currency,
     }
     booking = service.reserve(trip_id, hotel_details)
     return _to_response(booking)

@@ -1,5 +1,4 @@
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.parser import event_parser
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from services.payment.applications.process_payment import ProcessPaymentService
@@ -36,15 +35,17 @@ def _to_response(payment: Payment) -> dict:
 
 
 @logger.inject_lambda_context
-@event_parser(model=ProcessPaymentRequest)
-def lambda_handler(event: ProcessPaymentRequest, context: LambdaContext) -> dict:
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """決済処理のLambdaハンドラー"""
     logger.info("Received process payment request")
 
-    trip_id = TripId(value=event.trip_id)
+    payload = event.get("Payload", event)
+    request = ProcessPaymentRequest.model_validate(payload)
+
+    trip_id = TripId(value=request.trip_id)
     payment = service.process(
         trip_id=trip_id,
-        amount=event.amount,
-        currency_code=event.currency,
+        amount=request.amount,
+        currency_code=request.currency,
     )
     return _to_response(payment)
