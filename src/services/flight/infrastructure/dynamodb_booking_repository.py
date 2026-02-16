@@ -79,6 +79,18 @@ class DynamoDBBookingRepository(BookingRepository):
         item = items[0]
         return self._to_entity(item)
 
+    def update(self, booking: Booking) -> None:
+        """予約のステータスを更新する"""
+        self.table.update_item(
+            Key={
+                "PK": f"TRIP#{booking.trip_id}",
+                "SK": f"FLIGHT#{booking.id}",
+            },
+            UpdateExpression="SET #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":status": booking.status.value},
+        )
+
     def _to_entity(self, item: dict) -> Booking:
         """DynamoDB アイテムをドメインエンティティに変換する"""
         return Booking(
