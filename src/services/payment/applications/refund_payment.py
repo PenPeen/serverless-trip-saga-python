@@ -14,6 +14,7 @@ class RefundPaymentService:
         payment = self._repository.find_by_trip_id(trip_id)
         if payment is None:
             return None
+        expected_status = payment.status
         payment.refund()
-        self._repository.update(payment)
+        self._repository.update(payment, expected_status=expected_status)
         return payment

@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 from services.payment.domain.entity.payment import Payment
+from services.payment.domain.enum.payment_status import PaymentStatus
 from services.payment.domain.value_object.payment_id import PaymentId
 from services.shared.domain import Repository, TripId
 
@@ -24,6 +25,8 @@ class PaymentRepository(Repository[Payment, PaymentId]):
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, payment: Payment) -> None:
+    def update(
+        self, payment: Payment, expected_status: PaymentStatus | None = None
+    ) -> None:
         """決済を更新する"""
         raise NotImplementedError
