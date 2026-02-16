@@ -22,3 +22,8 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
     def find_by_trip_id(self, trip_id: TripId) -> HotelBooking | None:
         """TripIDで検索する"""
         raise NotImplementedError
+
+    @abstractmethod
+    def update(self, booking: HotelBooking) -> None:
+        """予約を更新する"""
+        raise NotImplementedError

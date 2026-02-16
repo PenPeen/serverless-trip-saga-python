@@ -22,3 +22,8 @@ class PaymentRepository(Repository[Payment, PaymentId]):
     def find_by_trip_id(self, trip_id: TripId) -> Payment | None:
         """Trip ID で検索する"""
         raise NotImplementedError
+
+    @abstractmethod
+    def update(self, payment: Payment) -> None:
+        """決済を更新する"""
+        raise NotImplementedError

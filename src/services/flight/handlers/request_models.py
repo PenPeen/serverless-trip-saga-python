@@ -72,3 +72,9 @@ class ReserveFlightRequest(BaseModel):
             ]
         }
     }
+
+
+class CancelFlightRequest(BaseModel):
+    """フライトキャンセルリクエストモデル（補償トランザクション用）"""
+
+    trip_id: str = Field(..., min_length=1)

@@ -69,6 +69,18 @@ class DynamoDBPaymentRepository(PaymentRepository):
             return None
         return self._to_entity(items[0])
 
+    def update(self, payment: Payment) -> None:
+        """決済のステータスを更新する"""
+        self.table.update_item(
+            Key={
+                "PK": f"TRIP#{payment.trip_id}",
+                "SK": f"PAYMENT#{payment.id}",
+            },
+            UpdateExpression="SET #status = :status",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":status": payment.status.value},
+        )
+
     def _to_entity(self, item: dict) -> Payment:
         """DynamoDB アイテムをドメインエンティティに変換する"""
         return Payment(

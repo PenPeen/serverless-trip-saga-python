@@ -20,3 +20,8 @@ class Repository(ABC, Generic[T, ID]):
     def find_by_id(self, id: ID) -> T | None:
         """IDで集約を検索する"""
         raise NotImplementedError
+
+    @abstractmethod
+    def update(self, aggregate: T) -> None:
+        """集約を更新する"""
+        raise NotImplementedError
