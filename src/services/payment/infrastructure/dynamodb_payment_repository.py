@@ -50,6 +50,7 @@ class DynamoDBPaymentRepository(PaymentRepository):
         """決済IDで検索"""
         response = self.table.scan(
             FilterExpression=Attr("payment_id").eq(str(payment_id)),
+            ConsistentRead=True,
         )
         items = response.get("Items", [])
         if not items:
@@ -61,6 +62,7 @@ class DynamoDBPaymentRepository(PaymentRepository):
         response = self.table.query(
             KeyConditionExpression=Key("PK").eq(f"TRIP#{trip_id}")
             & Key("SK").begins_with("PAYMENT#"),
+            ConsistentRead=True,
         )
         items = response.get("Items", [])
         if not items:
