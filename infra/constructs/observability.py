@@ -53,6 +53,7 @@ class Observability(Construct):
                 "DdTraceEnabled": "true",
                 "DdFetchLambdaTags": "true",
                 "DdFetchStepFunctionsTags": "true",
+                "DdStepFunctionsTraceEnabled": "true",
             },
         )
 
