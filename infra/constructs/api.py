@@ -1,5 +1,5 @@
-from aws_cdk import aws_apigatewayv2 as apigwv2
-from aws_cdk import aws_apigatewayv2_integrations as integrations
+from aws_cdk import aws_apigateway as apigw
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
 from aws_cdk import aws_stepfunctions as sfn
 from constructs import Construct
@@ -18,51 +18,81 @@ class Api(Construct):
     ) -> None:
         super().__init__(scope, id)
 
-        self.http_api = apigwv2.HttpApi(
+        self.rest_api = apigw.RestApi(
             self,
             "TripApi",
-            api_name="Trip Booking API",
-            create_default_stage=False,
-        )
-
-        apigwv2.HttpStage(
-            self,
-            "DefaultStage",
-            http_api=self.http_api,
-            auto_deploy=True,
-            stage_name="$default",
-            throttle=apigwv2.ThrottleSettings(
-                burst_limit=10,
-                rate_limit=5,
+            rest_api_name="Trip Booking API",
+            deploy_options=apigw.StageOptions(
+                stage_name="prod",
+                throttling_burst_limit=10,
+                throttling_rate_limit=5,
             ),
         )
+
+        # IAM Role: API Gateway -> Step Functions StartExecution
+        apigw_role = iam.Role(
+            self,
+            "ApiGatewayStepFunctionsRole",
+            assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
+        )
+        state_machine.grant_start_execution(apigw_role)
 
         # POST /trips -> Step Functions (非同期)
-        self.http_api.add_routes(
-            path="/trips",
-            methods=[apigwv2.HttpMethod.POST],
-            integration=integrations.HttpStepFunctionsIntegration(
-                "StartExecution",
-                state_machine=state_machine,
+        trips_resource = self.rest_api.root.add_resource("trips")
+
+        sfn_integration = apigw.AwsIntegration(
+            service="states",
+            action="StartExecution",
+            integration_http_method="POST",
+            options=apigw.IntegrationOptions(
+                credentials_role=apigw_role,
+                request_templates={
+                    "application/json": (
+                        '#set($input = $input.json("$"))\n'
+                        "{\n"
+                        f'  "stateMachineArn": "{state_machine.state_machine_arn}",\n'
+                        '  "input": "$util.escapeJavaScript($input)"\n'
+                        "}"
+                    ),
+                },
+                integration_responses=[
+                    apigw.IntegrationResponse(
+                        status_code="200",
+                        response_templates={
+                            "application/json": (
+                                '#set($result = $input.path("$"))\n'
+                                "{\n"
+                                '  "executionArn": "$result.executionArn",\n'
+                                '  "startDate": "$result.startDate"\n'
+                                "}"
+                            ),
+                        },
+                    ),
+                    apigw.IntegrationResponse(
+                        status_code="400",
+                        selection_pattern="4\\d{2}",
+                    ),
+                    apigw.IntegrationResponse(
+                        status_code="500",
+                        selection_pattern="5\\d{2}",
+                    ),
+                ],
             ),
+        )
+
+        trips_resource.add_method(
+            "POST",
+            sfn_integration,
+            method_responses=[
+                apigw.MethodResponse(status_code="200"),
+                apigw.MethodResponse(status_code="400"),
+                apigw.MethodResponse(status_code="500"),
+            ],
         )
 
         # GET /trips -> Lambda (list_trips)
-        self.http_api.add_routes(
-            path="/trips",
-            methods=[apigwv2.HttpMethod.GET],
-            integration=integrations.HttpLambdaIntegration(
-                "ListTripsIntegration",
-                handler=list_trips,
-            ),
-        )
+        trips_resource.add_method("GET", apigw.LambdaIntegration(list_trips))
 
         # GET /trips/{trip_id} -> Lambda (get_trip)
-        self.http_api.add_routes(
-            path="/trips/{trip_id}",
-            methods=[apigwv2.HttpMethod.GET],
-            integration=integrations.HttpLambdaIntegration(
-                "GetTripIntegration",
-                handler=get_trip,
-            ),
-        )
+        trip_resource = trips_resource.add_resource("{trip_id}")
+        trip_resource.add_method("GET", apigw.LambdaIntegration(get_trip))
