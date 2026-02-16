@@ -20,7 +20,7 @@ class Api(Construct):
 
         self.rest_api = apigw.RestApi(
             self,
-            "TripApi",
+            "TripRestApi",
             rest_api_name="Trip Booking API",
             deploy_options=apigw.StageOptions(
                 stage_name="prod",
