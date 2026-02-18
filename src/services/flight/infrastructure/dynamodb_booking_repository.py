@@ -50,7 +50,7 @@ class DynamoDBBookingRepository(BookingRepository):
 
     def find_by_id(self, booking_id: BookingId) -> Booking | None:
         """予約IDで検索"""
-        trip_id = str(booking_id).removeprefix("flight_for_#")
+        trip_id = str(booking_id).removeprefix("flight_for_")
         response = self.table.get_item(
             Key={
                 "PK": f"TRIP#{trip_id}",

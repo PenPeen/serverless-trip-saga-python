@@ -21,4 +21,4 @@ class BookingId:
     def from_trip_id(cls, trip_id: TripId) -> BookingId:
         """TripId から冪等な BookingIdを生成"""
 
-        return cls(value=f"flight_for_#{trip_id}")
+        return cls(value=f"flight_for_{trip_id}")
