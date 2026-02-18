@@ -30,7 +30,7 @@ class FlightDetailsRequest(BaseModel):
 
     price_currency: str = Field(
         default="JPY",
-        patern="^[A-Z]{3}$",
+        pattern="^[A-Z]{3}$",
         description="通貨コード（ISO 4217）",
         examples=["JPY", "USD"],
     )
