@@ -1,4 +1,3 @@
-import json
 import os
 
 import boto3
@@ -8,6 +7,8 @@ from aws_lambda_powertools.utilities.data_classes import (
     event_source,
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
+
+from services.shared.utils import api_response
 
 logger = Logger()
 
@@ -25,7 +26,7 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
     trip_id = path_params.get("trip_id")
 
     if not trip_id:
-        return _response(400, {"message": "trip_id is required"})
+        return api_response(400, {"message": "trip_id is required"})
 
     logger.info("Fetching trip details", extra={"trip_id": trip_id})
 
@@ -37,14 +38,14 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
 
         items = response.get("Items", [])
         if not items:
-            return _response(404, {"message": f"Trip not found: {trip_id}"})
+            return api_response(404, {"message": f"Trip not found: {trip_id}"})
 
         trip = _assemble_trip(trip_id, items)
-        return _response(200, trip)
+        return api_response(200, trip)
 
     except Exception:
         logger.exception("Failed to fetch trip details")
-        return _response(500, {"message": "Internal server error"})
+        return api_response(500, {"message": "Internal server error"})
 
 
 def _assemble_trip(trip_id: str, items: list[dict]) -> dict:
@@ -87,12 +88,3 @@ def _assemble_trip(trip_id: str, items: list[dict]) -> dict:
             }
 
     return trip
-
-
-def _response(status_code: int, body: dict) -> dict:
-    """API Gateway Lambda Proxy Integration のレスポンス形式を生成する"""
-    return {
-        "statusCode": status_code,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body, default=str),
-    }
