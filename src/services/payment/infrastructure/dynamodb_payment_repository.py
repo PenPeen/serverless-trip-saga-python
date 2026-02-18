@@ -46,14 +46,17 @@ class DynamoDBPaymentRepository(PaymentRepository):
 
     def find_by_id(self, payment_id: PaymentId) -> Payment | None:
         """決済IDで検索"""
-        response = self.table.scan(
-            FilterExpression="payment_id = :pid",
-            ExpressionAttributeValues={":pid": str(payment_id)},
+        trip_id = str(payment_id).removeprefix("payment_for_")
+        response = self.table.get_item(
+            Key={
+                "PK": f"TRIP#{trip_id}",
+                "SK": f"PAYMENT#{payment_id}",
+            }
         )
-        items = response.get("Items", [])
-        if not items:
+        item = response.get("Item")
+        if not item:
             return None
-        return self._to_entity(items[0])
+        return self._to_entity(item)
 
     def find_by_trip_id(self, trip_id: TripId) -> Payment | None:
         """Trip ID で決済を検索する"""
