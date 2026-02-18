@@ -45,7 +45,7 @@ class FlightDetailsRequest(BaseModel):
 
 
 class ReserveFlightRequest(BaseModel):
-    """ "フライト予約リクエストスキーマ"""
+    """フライト予約リクエストスキーマ"""
 
     trip_id: str = Field(
         ...,
