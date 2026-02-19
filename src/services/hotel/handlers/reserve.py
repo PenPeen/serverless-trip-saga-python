@@ -23,6 +23,17 @@ factory = HotelBookingFactory()
 service = ReserveHotelService(repository=repository, factory=factory)
 
 
+def _to_hotel_details(request: ReserveHotelRequest) -> HotelDetails:
+    """リクエストボディから HotelDetails を構築する"""
+    return {
+        "hotel_name": request.hotel_details.hotel_name,
+        "check_in_date": request.hotel_details.check_in_date,
+        "check_out_date": request.hotel_details.check_out_date,
+        "price_amount": request.hotel_details.price_amount,
+        "price_currency": request.hotel_details.price_currency,
+    }
+
+
 def _to_response(booking: HotelBooking) -> dict:
     """Entity をレスポンス形式に変換"""
     return SuccessResponse(
@@ -49,12 +60,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     request = ReserveHotelRequest.model_validate(payload)
 
     trip_id = TripId(value=request.trip_id)
-    hotel_details: HotelDetails = {
-        "hotel_name": request.hotel_details.hotel_name,
-        "check_in_date": request.hotel_details.check_in_date,
-        "check_out_date": request.hotel_details.check_out_date,
-        "price_amount": request.hotel_details.price_amount,
-        "price_currency": request.hotel_details.price_currency,
-    }
+    hotel_details = _to_hotel_details(request)
     booking = service.reserve(trip_id, hotel_details)
     return _to_response(booking)
