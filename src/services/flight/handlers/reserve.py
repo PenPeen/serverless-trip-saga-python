@@ -23,26 +23,6 @@ factory = BookingFactory()
 service = ReserveFlightService(repository=repository, factory=factory)
 
 
-@logger.inject_lambda_context
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
-    """フライト予約 Lambda Handler
-
-    Step Functions からの入力を受け取り、フライト予約処理を実行する。
-    payload にはDatadog トレースマージ用のコンテキストが含まれるため、
-    Payload キーからビジネスデータを取り出してバリデーションする。
-    """
-
-    logger.info("Received reserve flight request")
-
-    payload = event.get("Payload", event)
-    request = ReserveFlightRequest.model_validate(payload)
-
-    trip_id = TripId(value=request.trip_id)
-    flight_details = _to_flight_details(request)
-    booking = service.reserve(trip_id, flight_details)
-    return _to_response(booking)
-
-
 def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
     """リクエストボディから FlightDetails を構築する"""
 
@@ -69,3 +49,23 @@ def _to_response(booking: Booking) -> dict:
             status=booking.status.value,
         )
     ).model_dump()
+
+
+@logger.inject_lambda_context
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    """フライト予約 Lambda Handler
+
+    Step Functions からの入力を受け取り、フライト予約処理を実行する。
+    payload にはDatadog トレースマージ用のコンテキストが含まれるため、
+    Payload キーからビジネスデータを取り出してバリデーションする。
+    """
+
+    logger.info("Received reserve flight request")
+
+    payload = event.get("Payload", event)
+    request = ReserveFlightRequest.model_validate(payload)
+
+    trip_id = TripId(value=request.trip_id)
+    flight_details = _to_flight_details(request)
+    booking = service.reserve(trip_id, flight_details)
+    return _to_response(booking)
