@@ -1,4 +1,3 @@
-import json
 import os
 
 import boto3
@@ -9,6 +8,8 @@ from aws_lambda_powertools.utilities.data_classes import (
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from boto3.dynamodb.conditions import Key
+
+from services.shared.utils import api_response
 
 logger = Logger()
 
@@ -32,11 +33,11 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
 
         items = response.get("Items", [])
         trips = _deduplicate_trips(items)
-        return _response(200, {"trips": trips, "count": len(trips)})
+        return api_response(200, {"trips": trips, "count": len(trips)})
 
     except Exception:
         logger.exception("Failed to list trips")
-        return _response(500, {"message": "Internal server error"})
+        return api_response(500, {"message": "Internal server error"})
 
 
 def _deduplicate_trips(items: list[dict]) -> list[dict]:
@@ -56,13 +57,3 @@ def _deduplicate_trips(items: list[dict]) -> list[dict]:
             trips.append({"trip_id": trip_id})
 
     return trips
-
-
-def _response(status_code: int, body: dict) -> dict:
-    """API Gateway HTTP API のレスポンス形式を生成する"""
-
-    return {
-        "statusCode": status_code,
-        "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body, default=str),
-    }

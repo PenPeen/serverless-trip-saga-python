@@ -20,7 +20,7 @@ class BookingRepository(Repository[Booking, BookingId]):
         raise NotImplementedError
 
     @abstractmethod
-    def find_by_trip_id(self, tripId: TripId) -> Booking | None:
+    def find_by_trip_id(self, trip_id: TripId) -> Booking | None:
         """TripIDで検索"""
         raise NotImplementedError
 

@@ -20,7 +20,7 @@ class Orchestration(Construct):
     ):
         super().__init__(scope, id)
 
-        _payload = sfn.TaskInput.from_object(
+        lambda_payload = sfn.TaskInput.from_object(
             DatadogStepFunctions.build_lambda_payload_to_merge_traces(
                 {"Payload.$": "$"}
             )
@@ -31,7 +31,7 @@ class Orchestration(Construct):
             self,
             "ReserveFlight",
             lambda_function=flight_reserve,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight",
         )
@@ -41,7 +41,7 @@ class Orchestration(Construct):
             self,
             "ReserveHotel",
             lambda_function=hotel_reserve,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel",
         )
@@ -51,7 +51,7 @@ class Orchestration(Construct):
             self,
             "ProcessPayment",
             lambda_function=payment_process,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.payment",
         )
@@ -65,7 +65,7 @@ class Orchestration(Construct):
             self,
             "CancelHotelFromPayment",
             lambda_function=hotel_cancel,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.hotel_cancel",
         )
@@ -75,7 +75,7 @@ class Orchestration(Construct):
             self,
             "CancelFlightFromPayment",
             lambda_function=flight_cancel,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
@@ -85,7 +85,7 @@ class Orchestration(Construct):
             self,
             "CancelFlightFromHotel",
             lambda_function=flight_cancel,
-            payload=_payload,
+            payload=lambda_payload,
             retry_on_service_exceptions=True,
             result_path="$.results.flight_cancel",
         )
