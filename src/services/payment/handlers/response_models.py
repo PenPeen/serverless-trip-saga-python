@@ -16,12 +16,3 @@ class SuccessResponse(BaseModel):
 
     status: str = "success"
     data: PaymentData
-
-
-class ErrorResponse(BaseModel):
-    """エラーレスポンスモデル"""
-
-    status: str = "error"
-    error_code: str
-    message: str
-    details: list | None = None
