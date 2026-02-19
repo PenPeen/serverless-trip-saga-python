@@ -14,6 +14,7 @@ class CancelFlightService:
         booking = self._repository.find_by_trip_id(trip_id)
         if booking is None:
             return None
+        expected_status = booking.status
         booking.cancel()
-        self._repository.update(booking)
+        self._repository.update(booking, expected_status=expected_status)
         return booking

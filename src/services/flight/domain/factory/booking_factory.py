@@ -2,6 +2,7 @@ from decimal import Decimal
 from typing import TypedDict
 
 from services.flight.domain.entity import Booking
+from services.flight.domain.enum import BookingStatus
 from services.flight.domain.value_object import BookingId, FlightNumber
 from services.shared.domain import IsoDateTime, Money, TripId
 from services.shared.domain.value_object.currency import Currency
@@ -40,4 +41,5 @@ class BookingFactory:
             departure_time=departure_time,
             arrival_time=arrival_time,
             price=price,
+            status=BookingStatus.PENDING,
         )

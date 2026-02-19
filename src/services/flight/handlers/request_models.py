@@ -30,14 +30,14 @@ class FlightDetailsRequest(BaseModel):
 
     price_currency: str = Field(
         default="JPY",
-        patern="^[A-Z]{3}$",
+        pattern="^[A-Z]{3}$",
         description="通貨コード（ISO 4217）",
         examples=["JPY", "USD"],
     )
 
     @field_validator("price_amount", mode="before")
     @classmethod
-    def convert_price_to_decimal(cls, v):
+    def convert_price_to_decimal(cls, v: object) -> Decimal:
         """Decimalに変換する"""
         if isinstance(v, Decimal):
             return v
@@ -45,7 +45,7 @@ class FlightDetailsRequest(BaseModel):
 
 
 class ReserveFlightRequest(BaseModel):
-    """ "フライト予約リクエストスキーマ"""
+    """フライト予約リクエストスキーマ"""
 
     trip_id: str = Field(
         ...,

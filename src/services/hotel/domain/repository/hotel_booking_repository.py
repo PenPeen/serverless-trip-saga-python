@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 from services.hotel.domain.entity.hotel_booking import HotelBooking
+from services.hotel.domain.enum.hotel_booking_status import HotelBookingStatus
 from services.hotel.domain.value_object.hotel_booking_id import HotelBookingId
 from services.shared.domain import Repository, TripId
 
@@ -24,6 +25,8 @@ class HotelBookingRepository(Repository[HotelBooking, HotelBookingId]):
         raise NotImplementedError
 
     @abstractmethod
-    def update(self, booking: HotelBooking) -> None:
+    def update(
+        self, booking: HotelBooking, expected_status: HotelBookingStatus | None = None
+    ) -> None:
         """予約を更新する"""
         raise NotImplementedError

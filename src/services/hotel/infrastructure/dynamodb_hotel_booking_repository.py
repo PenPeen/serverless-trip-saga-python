@@ -2,6 +2,7 @@ import os
 from decimal import Decimal
 
 import boto3
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 from services.hotel.domain.entity import HotelBooking
@@ -9,7 +10,10 @@ from services.hotel.domain.enum import HotelBookingStatus
 from services.hotel.domain.repository import HotelBookingRepository
 from services.hotel.domain.value_object import HotelBookingId, HotelName, StayPeriod
 from services.shared.domain import Currency, Money, TripId
-from services.shared.domain.exception.exceptions import DuplicateResourceException
+from services.shared.domain.exception.exceptions import (
+    DuplicateResourceException,
+    OptimisticLockException,
+)
 
 
 class DynamoDBHotelBookingRepository(HotelBookingRepository):
@@ -38,9 +42,7 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
             "GSI1SK": f"TRIP#{booking.trip_id}",
         }
         try:
-            self.table.put_item(
-                Item=item, ConditionExpression="attribute_not_exists(PK)"
-            )
+            self.table.put_item(Item=item, ConditionExpression=Attr("PK").not_exists())
         except ClientError as e:
             if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
                 raise DuplicateResourceException(
@@ -54,7 +56,8 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
             Key={
                 "PK": f"TRIP#{trip_id}",
                 "SK": f"HOTEL#{booking_id}",
-            }
+            },
+            ConsistentRead=True,
         )
         item = response.get("Item")
         if not item:
@@ -64,28 +67,42 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
     def find_by_trip_id(self, trip_id: TripId) -> HotelBooking | None:
         """Trip ID でホテル予約を検索する"""
         response = self.table.query(
-            KeyConditionExpression="PK = :pk AND begins_with(SK, :sk_prefix)",
-            ExpressionAttributeValues={
-                ":pk": f"TRIP#{trip_id}",
-                ":sk_prefix": "HOTEL#",
-            },
+            KeyConditionExpression=Key("PK").eq(f"TRIP#{trip_id}")
+            & Key("SK").begins_with("HOTEL#"),
+            ConsistentRead=True,
         )
         items = response.get("Items", [])
         if not items:
             return None
         return self._to_entity(items[0])
 
-    def update(self, booking: HotelBooking) -> None:
+    def update(
+        self, booking: HotelBooking, expected_status: HotelBookingStatus | None = None
+    ) -> None:
         """予約のステータスを更新する"""
-        self.table.update_item(
-            Key={
+        kwargs: dict = {
+            "Key": {
                 "PK": f"TRIP#{booking.trip_id}",
                 "SK": f"HOTEL#{booking.id}",
             },
-            UpdateExpression="SET #status = :status",
-            ExpressionAttributeNames={"#status": "status"},
-            ExpressionAttributeValues={":status": booking.status.value},
-        )
+            "UpdateExpression": "SET #status = :status",
+            "ExpressionAttributeNames": {"#status": "status"},
+            "ExpressionAttributeValues": {":status": booking.status.value},
+        }
+
+        if expected_status is not None:
+            kwargs["ConditionExpression"] = Attr("status").eq(expected_status.value)
+
+        try:
+            self.table.update_item(**kwargs)
+        except ClientError as e:
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                raise OptimisticLockException(
+                    f"Hotel booking status conflict: "
+                    f"expected {expected_status}, "
+                    f"booking_id={booking.id}"
+                )
+            raise
 
     def _to_entity(self, item: dict) -> HotelBooking:
         """DynamoDB アイテムをドメインエンティティに変換する"""

@@ -28,7 +28,7 @@ class Money:
 
     @classmethod
     def jpy(cls, amount: Decimal) -> Money:
-        """日本円で Moeny を生成"""
+        """日本円で Money を生成"""
         return cls(amount, Currency.jpy())
 
     @classmethod

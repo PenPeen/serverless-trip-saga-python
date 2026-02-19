@@ -24,6 +24,12 @@ class TestBooking:
         with pytest.raises(BusinessRuleViolationException):
             booking.confirm()
 
+    def test_cancel_is_idempotent(self, create_booking):
+        """CANCELLED状態で cancel() を呼んでも例外なくCANCELLEDのまま"""
+        booking = create_booking(status=BookingStatus.CANCELLED)
+        booking.cancel()
+        assert booking.status == BookingStatus.CANCELLED
+
     def test_invalid_schedule_raises_error(self):
         """出発時刻よりも到着時刻が前の場合、例外が発生する"""
         departure_time = IsoDateTime.from_string("2024-01-01T12:00:00")

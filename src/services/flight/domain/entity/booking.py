@@ -68,4 +68,6 @@ class Booking(AggregateRoot[BookingId]):
 
     def cancel(self) -> None:
         """予約をキャンセルする"""
+        if self._status == BookingStatus.CANCELLED:
+            return
         self._status = BookingStatus.CANCELLED
