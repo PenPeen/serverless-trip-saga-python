@@ -19,7 +19,7 @@ class FlightNumber:
         normalized = self.value.upper()
         if not self.PATTERN.match(normalized):
             raise ValueError(
-                f"Invalid flight number format: {self.value}."
+                f"Invalid flight number format: {self.value}. "
                 "Expected format: AA123 (2 letters + 1-4 digits)"
             )
         object.__setattr__(self, "value", normalized)
