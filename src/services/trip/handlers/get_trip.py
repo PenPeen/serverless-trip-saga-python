@@ -7,6 +7,7 @@ from aws_lambda_powertools.utilities.data_classes import (
     event_source,
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3.dynamodb.conditions import Key
 
 from services.shared.utils import api_response
 
@@ -32,8 +33,7 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
 
     try:
         response = table.query(
-            KeyConditionExpression="PK = :pk",
-            ExpressionAttributeValues={":pk": f"TRIP#{trip_id}"},
+            KeyConditionExpression=Key("PK").eq(f"TRIP#{trip_id}"),
         )
 
         items = response.get("Items", [])
