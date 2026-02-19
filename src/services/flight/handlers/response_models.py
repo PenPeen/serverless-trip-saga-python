@@ -19,4 +19,3 @@ class SuccessResponse(BaseModel):
 
     status: str = "success"
     data: BookingData
-
