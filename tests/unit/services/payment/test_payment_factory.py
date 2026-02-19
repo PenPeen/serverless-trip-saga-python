@@ -2,17 +2,20 @@ from decimal import Decimal
 
 from services.payment.domain.entity.payment import Payment
 from services.payment.domain.enum.payment_status import PaymentStatus
-from services.payment.domain.factory.payment_factory import PaymentFactory
+from services.payment.domain.factory.payment_factory import PaymentFactory, PaymentDetails
 
 
 class TestPaymentFactory:
     def test_create_payment(self, trip_id):
         factory = PaymentFactory()
+        payment_details: PaymentDetails = {
+            "amount": Decimal("50000"),
+            "currency_code": "JPY",
+        }
 
         payment = factory.create(
             trip_id=trip_id,
-            amount=Decimal("50000"),
-            currency_code="JPY",
+            payment_details=payment_details,
         )
 
         assert isinstance(payment, Payment)
