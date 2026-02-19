@@ -20,7 +20,7 @@ class ProcessPaymentRequest(BaseModel):
 
     @field_validator("amount", mode="before")
     @classmethod
-    def convert_amount_to_decimal(cls, v):
+    def convert_amount_to_decimal(cls, v: object) -> Decimal:
         if isinstance(v, Decimal):
             return v
         return Decimal(str(v))
