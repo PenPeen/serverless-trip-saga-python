@@ -57,7 +57,8 @@ class DynamoDBBookingRepository(BookingRepository):
             Key={
                 "PK": f"TRIP#{trip_id}",
                 "SK": f"FLIGHT#{booking_id}",
-            }
+            },
+            ConsistentRead=True,
         )
         item = response.get("Item")
         if not item:
@@ -69,6 +70,7 @@ class DynamoDBBookingRepository(BookingRepository):
         response = self.table.query(
             KeyConditionExpression=Key("PK").eq(f"TRIP#{trip_id}")
             & Key("SK").begins_with("FLIGHT#"),
+            ConsistentRead=True,
         )
 
         items = response.get("Items", [])
