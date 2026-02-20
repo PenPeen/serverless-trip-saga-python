@@ -38,8 +38,6 @@ class DynamoDBHotelBookingRepository(HotelBookingRepository):
             "price_amount": str(booking.price.amount),
             "price_currency": str(booking.price.currency),
             "status": booking.status.value,
-            "GSI1PK": "TRIPS",
-            "GSI1SK": f"TRIP#{booking.trip_id}",
         }
         try:
             self.table.put_item(Item=item, ConditionExpression=Attr("PK").not_exists())
