@@ -1,0 +1,5 @@
+{
+  "trip_id": "trip-lambda-invalid-003",
+  "amount": -1,
+  "currency": "JPY"
+}

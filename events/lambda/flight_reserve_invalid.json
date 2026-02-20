@@ -1,0 +1,10 @@
+{
+  "trip_id": "trip-lambda-invalid-001",
+  "flight_details": {
+    "flight_number": "",
+    "departure_time": "not-a-date",
+    "arrival_time": "2026-03-01T14:00:00",
+    "price_amount": -1,
+    "price_currency": "JPY"
+  }
+}
