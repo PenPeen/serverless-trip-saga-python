@@ -3,6 +3,7 @@ from constructs import Construct
 
 from infra.constructs import (
     Api,
+    Cdn,
     Database,
     Deployment,
     Functions,
@@ -44,13 +45,15 @@ class ServerlessTripSagaStack(Stack):
             payment_process=deployment.payment_process_alias,
         )
 
-        Api(
+        api = Api(
             self,
             "Api",
             state_machine=orchestration.state_machine,
             get_trip=fns.get_trip,
             list_trips=fns.list_trips,
         )
+
+        Cdn(self, "Cdn", rest_api=api.rest_api)
 
         Observability(
             self,
