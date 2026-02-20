@@ -1,6 +1,6 @@
 from services.flight.domain.entity import Booking
-from services.flight.domain.factory.booking_factory import BookingFactory, FlightDetails
-from services.flight.domain.repository.booking_repository import BookingRepository
+from services.flight.domain.factory import BookingFactory, FlightDetails
+from services.flight.domain.repository import BookingRepository
 from services.shared.domain import TripId
 
 
