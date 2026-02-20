@@ -2,7 +2,10 @@ from decimal import Decimal
 
 from services.payment.domain.entity.payment import Payment
 from services.payment.domain.enum.payment_status import PaymentStatus
-from services.payment.domain.factory.payment_factory import PaymentFactory, PaymentDetails
+from services.payment.domain.factory.payment_factory import (
+    PaymentDetails,
+    PaymentFactory,
+)
 
 
 class TestPaymentFactory:
