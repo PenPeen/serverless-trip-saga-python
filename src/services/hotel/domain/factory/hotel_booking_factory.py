@@ -1,14 +1,10 @@
 from decimal import Decimal
 from typing import TypedDict
 
-from services.hotel.domain.entity.hotel_booking import HotelBooking
-from services.hotel.domain.enum.hotel_booking_status import HotelBookingStatus
-from services.hotel.domain.value_object.hotel_booking_id import HotelBookingId
-from services.hotel.domain.value_object.hotel_name import HotelName
-from services.hotel.domain.value_object.stay_period import StayPeriod
-from services.shared.domain.value_object.currency import Currency
-from services.shared.domain.value_object.money import Money
-from services.shared.domain.value_object.trip_id import TripId
+from services.hotel.domain.entity import HotelBooking
+from services.hotel.domain.enum import HotelBookingStatus
+from services.hotel.domain.value_object import HotelBookingId, HotelName, StayPeriod
+from services.shared.domain import Currency, Money, TripId
 
 
 class HotelDetails(TypedDict):

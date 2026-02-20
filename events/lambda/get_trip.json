@@ -1,0 +1,32 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /trips/{trip_id}",
+  "rawPath": "/trips/trip-lambda-001",
+  "rawQueryString": "",
+  "headers": {
+    "x-forwarded-for": "127.0.0.1",
+    "content-type": "application/json"
+  },
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "test",
+    "domainName": "localhost",
+    "domainPrefix": "test",
+    "http": {
+      "method": "GET",
+      "path": "/trips/trip-lambda-001",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "127.0.0.1",
+      "userAgent": "manual-test"
+    },
+    "requestId": "test-request-id",
+    "routeKey": "GET /trips/{trip_id}",
+    "stage": "$default",
+    "time": "20/Feb/2026:00:00:00 +0000",
+    "timeEpoch": 1740009600000
+  },
+  "pathParameters": {
+    "trip_id": "trip-lambda-001"
+  },
+  "isBase64Encoded": false
+}
