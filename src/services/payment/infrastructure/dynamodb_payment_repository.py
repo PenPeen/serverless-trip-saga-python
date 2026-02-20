@@ -1,3 +1,4 @@
+import hashlib
 import os
 from decimal import Decimal
 
@@ -14,6 +15,13 @@ from services.shared.domain.exception.exceptions import (
     DuplicateResourceException,
     OptimisticLockException,
 )
+
+NUM_SHARDS = 4
+
+
+def _compute_shard(trip_id: str) -> int:
+    """trip_id から決定論的にシャード番号を算出する"""
+    return int(hashlib.sha256(trip_id.encode()).hexdigest(), 16) % NUM_SHARDS
 
 
 class DynamoDBPaymentRepository(PaymentRepository):
@@ -35,7 +43,7 @@ class DynamoDBPaymentRepository(PaymentRepository):
             "amount": str(payment.amount.amount),
             "currency": str(payment.amount.currency),
             "status": payment.status.value,
-            "GSI1PK": "TRIPS",
+            "GSI1PK": f"TRIPS#{_compute_shard(str(payment.trip_id))}",
             "GSI1SK": f"TRIP#{payment.trip_id}",
         }
         try:

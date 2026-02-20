@@ -17,6 +17,8 @@ TABLE_NAME = os.environ["TABLE_NAME"]
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(TABLE_NAME)
 
+NUM_SHARDS = 4
+
 
 @logger.inject_lambda_context
 @event_source(data_class=APIGatewayProxyEventV2)
@@ -26,34 +28,17 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
     logger.info("Listing all trips")
 
     try:
-        response = table.query(
-            IndexName="GSI1",
-            KeyConditionExpression=Key("GSI1PK").eq("TRIPS"),
-        )
+        all_items: list[dict] = []
+        for shard in range(NUM_SHARDS):
+            response = table.query(
+                IndexName="GSI1",
+                KeyConditionExpression=Key("GSI1PK").eq(f"TRIPS#{shard}"),
+            )
+            all_items.extend(response.get("Items", []))
 
-        items = response.get("Items", [])
-        trips = _deduplicate_trips(items)
+        trips = [{"trip_id": item["trip_id"]} for item in all_items]
         return api_response(200, {"trips": trips, "count": len(trips)})
 
     except Exception:
         logger.exception("Failed to list trips")
         return api_response(500, {"message": "Internal server error"})
-
-
-def _deduplicate_trips(items: list[dict]) -> list[dict]:
-    """GSI から取得したアイテムを trip_id で重複排除する
-
-    1つの trip_id に対して FLIGHT・HOTEL・PAYMENT の3アイテムが GSI に存在するため、
-        trip_id の一意なリストに変換する
-    """
-
-    seen: set[str] = set()
-    trips: list[dict] = []
-
-    for item in items:
-        trip_id = item.get("trip_id", "")
-        if trip_id and trip_id not in seen:
-            seen.add(trip_id)
-            trips.append({"trip_id": trip_id})
-
-    return trips
