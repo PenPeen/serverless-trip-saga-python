@@ -1,4 +1,7 @@
 from aws_cdk import (
+    Aws,
+)
+from aws_cdk import (
     aws_apigateway as apigw,
 )
 from aws_cdk import (
@@ -62,12 +65,17 @@ class Cdn(Construct):
         )
 
         # API Gateway リソースポリシー: CloudFront 経由のみ許可
-        # 注意: Distribution ARN の条件は CFN 循環依存のため省略
+        # 注意: rest_api.arn_for_execute_api() は Ref: RestApiId を含むため
+        #       RestApi の Policy プロパティ内で使うと自己参照の循環依存が発生する。
+        #       回避策として REST API ID 部分を * に置き換えた ARN を使用する。
         #       OAC の SigV4 署名が真正性を保証する
         rest_api.add_to_resource_policy(
             iam.PolicyStatement(
                 principals=[iam.ServicePrincipal("cloudfront.amazonaws.com")],
                 actions=["execute-api:Invoke"],
-                resources=[rest_api.arn_for_execute_api()],
+                resources=[
+                    f"arn:{Aws.PARTITION}:execute-api:{Aws.REGION}:{Aws.ACCOUNT_ID}:*/*/*/*"
+                ],
+                conditions={"StringEquals": {"aws:SourceAccount": Aws.ACCOUNT_ID}},
             )
         )
