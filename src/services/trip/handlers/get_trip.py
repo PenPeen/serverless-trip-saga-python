@@ -1,4 +1,5 @@
 import os
+from typing import Callable
 
 import boto3
 from aws_lambda_powertools import Logger
@@ -48,43 +49,54 @@ def lambda_handler(event: APIGatewayProxyEventV2, context: LambdaContext) -> dic
         return api_response(500, {"message": "Internal server error"})
 
 
-def _assemble_trip(trip_id: str, items: list[dict]) -> dict:
-    """DynamoDB の複数アイテムを1つの旅行レスポンスに結合する
+def _build_flight(item: dict) -> dict:
+    return {
+        "booking_id": item["booking_id"],
+        "flight_number": item["flight_number"],
+        "departure_time": item["departure_time"],
+        "arrival_time": item["arrival_time"],
+        "price_amount": item["price_amount"],
+        "price_currency": item["price_currency"],
+        "status": item["status"],
+    }
 
-    Single Table Design では1つの PK に対して複数の entity_type のアイテムが存在する。
-    entity_type を判別して適切なキーに振り分ける。
-    """
+
+def _build_hotel(item: dict) -> dict:
+    return {
+        "booking_id": item["booking_id"],
+        "hotel_name": item["hotel_name"],
+        "check_in_date": item["check_in_date"],
+        "check_out_date": item["check_out_date"],
+        "price_amount": item["price_amount"],
+        "price_currency": item["price_currency"],
+        "status": item["status"],
+    }
+
+
+def _build_payment(item: dict) -> dict:
+    return {
+        "payment_id": item["payment_id"],
+        "amount": item["amount"],
+        "currency": item["currency"],
+        "status": item["status"],
+    }
+
+
+_ENTITY_ASSEMBLERS: dict[str, tuple[str, Callable[[dict], dict]]] = {
+    "FLIGHT": ("flight", _build_flight),
+    "HOTEL": ("hotel", _build_hotel),
+    "PAYMENT": ("payment", _build_payment),
+}
+
+
+def _assemble_trip(trip_id: str, items: list[dict]) -> dict:
+    """DynamoDB の複数アイテムを1つの旅行レスポンスに結合する"""
     trip: dict = {"trip_id": trip_id}
 
     for item in items:
         entity_type = item.get("entity_type")
-
-        if entity_type == "FLIGHT":
-            trip["flight"] = {
-                "booking_id": item["booking_id"],
-                "flight_number": item["flight_number"],
-                "departure_time": item["departure_time"],
-                "arrival_time": item["arrival_time"],
-                "price_amount": item["price_amount"],
-                "price_currency": item["price_currency"],
-                "status": item["status"],
-            }
-        elif entity_type == "HOTEL":
-            trip["hotel"] = {
-                "booking_id": item["booking_id"],
-                "hotel_name": item["hotel_name"],
-                "check_in_date": item["check_in_date"],
-                "check_out_date": item["check_out_date"],
-                "price_amount": item["price_amount"],
-                "price_currency": item["price_currency"],
-                "status": item["status"],
-            }
-        elif entity_type == "PAYMENT":
-            trip["payment"] = {
-                "payment_id": item["payment_id"],
-                "amount": item["amount"],
-                "currency": item["currency"],
-                "status": item["status"],
-            }
+        if entity_type in _ENTITY_ASSEMBLERS:
+            trip_key, build = _ENTITY_ASSEMBLERS[entity_type]
+            trip[trip_key] = build(item)
 
     return trip
