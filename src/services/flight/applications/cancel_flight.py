@@ -1,5 +1,5 @@
 from services.flight.domain.entity import Booking
-from services.flight.domain.repository.booking_repository import BookingRepository
+from services.flight.domain.repository import BookingRepository
 from services.shared.domain import TripId
 
 

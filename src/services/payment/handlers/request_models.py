@@ -2,6 +2,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, Field, field_validator
 
+from services.shared.utils.validators import to_decimal
+
 
 class ProcessPaymentRequest(BaseModel):
     """決済処理リクエストモデル"""
@@ -21,9 +23,7 @@ class ProcessPaymentRequest(BaseModel):
     @field_validator("amount", mode="before")
     @classmethod
     def convert_amount_to_decimal(cls, v: object) -> Decimal:
-        if isinstance(v, Decimal):
-            return v
-        return Decimal(str(v))
+        return to_decimal(v)
 
 
 class RefundPaymentRequest(BaseModel):

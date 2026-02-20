@@ -1,11 +1,7 @@
-from services.hotel.domain.enum.hotel_booking_status import HotelBookingStatus
-from services.hotel.domain.value_object.hotel_booking_id import HotelBookingId
-from services.hotel.domain.value_object.hotel_name import HotelName
-from services.hotel.domain.value_object.stay_period import StayPeriod
-from services.shared.domain.entity.aggregate import AggregateRoot
-from services.shared.domain.exception.exceptions import BusinessRuleViolationException
-from services.shared.domain.value_object.money import Money
-from services.shared.domain.value_object.trip_id import TripId
+from services.hotel.domain.enum import HotelBookingStatus
+from services.hotel.domain.value_object import HotelBookingId, HotelName, StayPeriod
+from services.shared.domain import AggregateRoot, Money, TripId
+from services.shared.domain.exception import BusinessRuleViolationException
 
 
 class HotelBooking(AggregateRoot[HotelBookingId]):

@@ -1,0 +1,10 @@
+{
+  "trip_id": "trip-lambda-001",
+  "flight_details": {
+    "flight_number": "NH001",
+    "departure_time": "2026-03-01T10:00:00",
+    "arrival_time": "2026-03-01T14:00:00",
+    "price_amount": 50000,
+    "price_currency": "JPY"
+  }
+}

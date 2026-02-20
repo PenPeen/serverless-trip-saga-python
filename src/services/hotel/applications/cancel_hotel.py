@@ -1,8 +1,6 @@
-from services.hotel.domain.entity.hotel_booking import HotelBooking
-from services.hotel.domain.repository.hotel_booking_repository import (
-    HotelBookingRepository,
-)
-from services.shared.domain.value_object.trip_id import TripId
+from services.hotel.domain.entity import HotelBooking
+from services.hotel.domain.repository import HotelBookingRepository
+from services.shared.domain import TripId
 
 
 class CancelHotelService:
