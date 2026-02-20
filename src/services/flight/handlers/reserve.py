@@ -2,14 +2,10 @@ from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from services.flight.applications.reserve_flight import ReserveFlightService
-from services.flight.domain.entity.booking import Booking
 from services.flight.domain.factory import BookingFactory
 from services.flight.domain.factory.booking_factory import FlightDetails
 from services.flight.handlers.request_models import ReserveFlightRequest
-from services.flight.handlers.response_models import (
-    BookingData,
-    SuccessResponse,
-)
+from services.flight.handlers.response_models import to_response
 from services.flight.infrastructure.dynamodb_booking_repository import (
     DynamoDBBookingRepository,
 )
@@ -21,34 +17,6 @@ logger = Logger()
 repository = DynamoDBBookingRepository()
 factory = BookingFactory()
 service = ReserveFlightService(repository=repository, factory=factory)
-
-
-def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
-    """リクエストボディから FlightDetails を構築する"""
-
-    return {
-        "flight_number": request.flight_details.flight_number,
-        "departure_time": request.flight_details.departure_time,
-        "arrival_time": request.flight_details.arrival_time,
-        "price_amount": request.flight_details.price_amount,
-        "price_currency": request.flight_details.price_currency,
-    }
-
-
-def _to_response(booking: Booking) -> dict:
-    """Entity をレスポンス形式に変換"""
-    return SuccessResponse(
-        data=BookingData(
-            booking_id=str(booking.id),
-            trip_id=str(booking.trip_id),
-            flight_number=str(booking.flight_number),
-            departure_time=str(booking.departure_time),
-            arrival_time=str(booking.arrival_time),
-            price_amount=str(booking.price.amount),
-            price_currency=str(booking.price.currency),
-            status=booking.status.value,
-        )
-    ).model_dump()
 
 
 @logger.inject_lambda_context
@@ -68,4 +36,16 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict:
     trip_id = TripId(value=request.trip_id)
     flight_details = _to_flight_details(request)
     booking = service.reserve(trip_id, flight_details)
-    return _to_response(booking)
+    return to_response(booking)
+
+
+def _to_flight_details(request: ReserveFlightRequest) -> FlightDetails:
+    """リクエストボディから FlightDetails を構築する"""
+
+    return {
+        "flight_number": request.flight_details.flight_number,
+        "departure_time": request.flight_details.departure_time,
+        "arrival_time": request.flight_details.arrival_time,
+        "price_amount": request.flight_details.price_amount,
+        "price_currency": request.flight_details.price_currency,
+    }
