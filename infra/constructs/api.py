@@ -1,6 +1,8 @@
+from aws_cdk import Duration
 from aws_cdk import aws_apigateway as apigw
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
+from aws_cdk import aws_secretsmanager as secretsmanager
 from aws_cdk import aws_stepfunctions as sfn
 from constructs import Construct
 
@@ -15,6 +17,7 @@ class Api(Construct):
         state_machine: sfn.StateMachine,
         get_trip: _lambda.Function,
         list_trips: _lambda.Function,
+        origin_verify_secret: secretsmanager.ISecret,
     ) -> None:
         super().__init__(scope, id)
 
@@ -36,6 +39,27 @@ class Api(Construct):
             assumed_by=iam.ServicePrincipal("apigateway.amazonaws.com"),
         )
         state_machine.grant_start_execution(apigw_role)
+
+        # Lambda Authorizer: x-origin-verify ヘッダーで CloudFront 経由のみ許可
+        authorizer_fn = _lambda.Function(
+            self,
+            "OriginVerifyAuthorizerFn",
+            runtime=_lambda.Runtime.PYTHON_3_14,
+            handler="authorizer.handler.lambda_handler",
+            code=_lambda.Code.from_asset("src"),
+            environment={
+                "ORIGIN_VERIFY_SECRET_ARN": origin_verify_secret.secret_arn,
+            },
+        )
+        origin_verify_secret.grant_read(authorizer_fn)
+
+        authorizer = apigw.RequestAuthorizer(
+            self,
+            "OriginVerifyAuthorizer",
+            handler=authorizer_fn,
+            identity_sources=[apigw.IdentitySource.header("x-origin-verify")],
+            results_cache_ttl=Duration.seconds(300),
+        )
 
         # POST /trips -> Step Functions (非同期)
         trips_resource = self.rest_api.root.add_resource("trips")
@@ -88,11 +112,20 @@ class Api(Construct):
                 apigw.MethodResponse(status_code="400"),
                 apigw.MethodResponse(status_code="500"),
             ],
+            authorizer=authorizer,
         )
 
         # GET /trips -> Lambda (list_trips)
-        trips_resource.add_method("GET", apigw.LambdaIntegration(list_trips))
+        trips_resource.add_method(
+            "GET",
+            apigw.LambdaIntegration(list_trips),
+            authorizer=authorizer,
+        )
 
         # GET /trips/{trip_id} -> Lambda (get_trip)
         trip_resource = trips_resource.add_resource("{trip_id}")
-        trip_resource.add_method("GET", apigw.LambdaIntegration(get_trip))
+        trip_resource.add_method(
+            "GET",
+            apigw.LambdaIntegration(get_trip),
+            authorizer=authorizer,
+        )
