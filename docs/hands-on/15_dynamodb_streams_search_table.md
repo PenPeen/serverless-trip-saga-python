@@ -310,7 +310,19 @@ def deserialize_image(image: dict) -> dict:
 
 SK（`FLIGHT#...`, `HOTEL#...`, `PAYMENT#...`）から entity_type を判定し、`update_item` で TripSearchTable の対応フィールドを部分更新します。
 
+`TypeDeserializer` は数値フィールドを `Decimal` に変換します（4.1 の表を参照）。`str()` で一律変換すると DynamoDB に String 型として保存され、数値比較や他のクライアントとの型不整合が生じます。`Decimal` はそのまま渡し、その他のみ文字列に変換するヘルパーを用意します。
+
 ```python
+from decimal import Decimal
+
+
+def _to_dynamodb_value(value):
+    """Decimal は Number 型のまま保持し、その他は文字列に変換する"""
+    if isinstance(value, Decimal):
+        return value  # boto3 resource API は Decimal を DynamoDB Number 型として保存
+    return str(value)
+
+
 def _build_update_expression(fields: dict) -> tuple[str, dict, dict]:
     """update_item に渡す UpdateExpression を構築する"""
     set_parts = []
@@ -322,7 +334,7 @@ def _build_update_expression(fields: dict) -> tuple[str, dict, dict]:
         placeholder_value = f":v{i}"
         set_parts.append(f"{placeholder_name} = {placeholder_value}")
         expression_attribute_names[placeholder_name] = key
-        expression_attribute_values[placeholder_value] = str(value)  # DynamoDB は Decimal → str で保存
+        expression_attribute_values[placeholder_value] = _to_dynamodb_value(value)
 
     update_expression = "SET " + ", ".join(set_parts)
     return update_expression, expression_attribute_names, expression_attribute_values
@@ -364,7 +376,7 @@ def _handle_hotel(trip_id: str, item: dict, search_table) -> None:
 
 def _handle_payment(trip_id: str, item: dict, search_table) -> None:
     fields = {
-        "total_amount": str(item.get("amount", "0")),
+        "total_amount": item.get("amount", Decimal("0")),  # Decimal のまま保持して Number 型で保存
         "currency": item.get("currency", ""),
         "payment_status": item.get("status", ""),
         "updated_at": datetime.utcnow().isoformat(),
@@ -380,24 +392,102 @@ def _handle_payment(trip_id: str, item: dict, search_table) -> None:
 
 ### 4.3 REMOVE の処理
 
-TripTable からアイテムが削除された場合、TripSearchTable の対応レコードも削除します。
+TripTable からアイテムが削除された場合、**SK を参照して削除されたエンティティを判別し、そのエンティティのフィールドのみをクリア**します。FLIGHT・HOTEL・PAYMENT は独立して削除される可能性があるため、1 つが削除されただけで TripSearchTable のレコード全体を消すと他のエンティティの情報まで失われます。
 
 ```python
-def _handle_remove(trip_id: str, search_table) -> None:
-    search_table.delete_item(Key={"trip_id": trip_id})
+def _handle_remove(trip_id: str, sk: str, search_table) -> None:
+    """SK に基づいて該当エンティティのフィールドのみをクリアする"""
+    if sk.startswith("FLIGHT#"):
+        fields = {
+            "flight_number": "",
+            "departure_time": "",
+            "arrival_time": "",
+            "flight_status": "REMOVED",
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    elif sk.startswith("HOTEL#"):
+        fields = {
+            "hotel_name": "",
+            "check_in_date": "",
+            "check_out_date": "",
+            "hotel_status": "REMOVED",
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    elif sk.startswith("PAYMENT#"):
+        fields = {
+            "total_amount": Decimal("0"),
+            "currency": "",
+            "payment_status": "REMOVED",
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+    else:
+        return  # TRIP# など対象外エンティティの削除は無視
+    update_expr, names, values = _build_update_expression(fields)
+    search_table.update_item(
+        Key={"trip_id": trip_id},
+        UpdateExpression=update_expr,
+        ExpressionAttributeNames=names,
+        ExpressionAttributeValues=values,
+    )
 ```
 
-> **注意**: REMOVE イベントは `OldImage` を参照します。`NewImage` は存在しません。また、FLIGHT / HOTEL / PAYMENT のどれかが削除されても TripSearchTable のレコードを削除するかどうかは要件次第です。ここではシンプルに削除する実装としています。
+> **注意**: REMOVE イベントは `OldImage` を参照します。`NewImage` は存在しません。Saga の補償トランザクションでは通常 `UpdateItem` でステータスを変更するため、`DeleteItem` が発行される機会は限られますが、直接 `DeleteItem` が呼ばれた場合の防御として有効です。
 
-### 4.4 完成コード
+### 4.4 べき等性の保証（ConditionExpression）
+
+DynamoDB Streams は **at-least-once** 配信であり、同一レコードが重複して届く可能性があります。また、ネットワーク遅延によりイベントの到着順序が逆転するケースも存在します。
+
+`ConditionExpression` を使い、Streams レコードの `ApproximateCreationDateTime`（近似イベント時刻）を `updated_at` と比較することで、古いイベントをスキップします。
+
+```python
+from boto3.dynamodb.conditions import Attr
+from botocore.exceptions import ClientError
+
+
+def _upsert(trip_id: str, fields: dict, event_time: str) -> None:
+    """べき等に upsert する。既存レコードの updated_at より古いイベントはスキップ"""
+    update_expr, names, values = _build_update_expression(fields)
+    try:
+        search_table.update_item(
+            Key={"trip_id": trip_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+            ConditionExpression=(
+                Attr("updated_at").not_exists()        # 初回 upsert
+                | Attr("updated_at").lt(event_time)    # 新しいイベントのみ適用
+            ),
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            pass  # 古いイベント（重複配信 or 順序逆転）は無視
+        else:
+            raise
+```
+
+`event_time` には Streams レコードの `ApproximateCreationDateTime`（Unix 秒）を ISO 文字列に変換して使用します。
+
+```python
+approx_ts: float = dynamodb_record.get("ApproximateCreationDateTime", 0)
+event_time = datetime.fromtimestamp(approx_ts, tz=timezone.utc).isoformat()
+```
+
+> **注意**: `updated_at` は FLIGHT / HOTEL / PAYMENT で共有するフィールドです。各エンティティが同一ミリ秒に届いた場合、後着のイベントが条件を通過できないことがあります。より堅牢にするには `flight_updated_at` / `hotel_updated_at` / `payment_updated_at` のようにエンティティごとに分けてください（本ハンズオンではシンプルさを優先）。
+
+---
+
+### 4.5 完成コード
 
 **`src/services/trip/handlers/stream_consumer.py`**:
 
 ```python
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from boto3.dynamodb.types import TypeDeserializer
 import boto3
+from boto3.dynamodb.conditions import Attr
+from botocore.exceptions import ClientError
 
 deserializer = TypeDeserializer()
 
@@ -407,6 +497,13 @@ search_table = dynamodb.Table(os.environ["SEARCH_TABLE_NAME"])
 
 def deserialize_image(image: dict) -> dict:
     return {k: deserializer.deserialize(v) for k, v in image.items()}
+
+
+def _to_dynamodb_value(value):
+    """Decimal は Number 型のまま保持し、その他は文字列に変換する"""
+    if isinstance(value, Decimal):
+        return value
+    return str(value)
 
 
 def _build_update_expression(
@@ -421,7 +518,7 @@ def _build_update_expression(
         value_placeholder = f":v{i}"
         set_parts.append(f"{name_placeholder} = {value_placeholder}")
         expression_attribute_names[name_placeholder] = key
-        expression_attribute_values[value_placeholder] = str(value)
+        expression_attribute_values[value_placeholder] = _to_dynamodb_value(value)
 
     return (
         "SET " + ", ".join(set_parts),
@@ -430,58 +527,87 @@ def _build_update_expression(
     )
 
 
-def _handle_flight(trip_id: str, item: dict) -> None:
+def _upsert(trip_id: str, fields: dict, event_time: str) -> None:
+    """べき等に upsert する。既存レコードの updated_at より古いイベントはスキップ"""
+    update_expr, names, values = _build_update_expression(fields)
+    try:
+        search_table.update_item(
+            Key={"trip_id": trip_id},
+            UpdateExpression=update_expr,
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+            ConditionExpression=(
+                Attr("updated_at").not_exists()        # 初回 upsert
+                | Attr("updated_at").lt(event_time)    # 新しいイベントのみ適用
+            ),
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            pass  # 古いイベント（重複配信 or 順序逆転）は無視
+        else:
+            raise
+
+
+def _handle_flight(trip_id: str, item: dict, event_time: str) -> None:
     fields = {
         "flight_number": item.get("flight_number", ""),
         "departure_time": item.get("departure_time", ""),
         "arrival_time": item.get("arrival_time", ""),
         "flight_status": item.get("status", ""),
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": event_time,
     }
-    update_expr, names, values = _build_update_expression(fields)
-    search_table.update_item(
-        Key={"trip_id": trip_id},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=names,
-        ExpressionAttributeValues=values,
-    )
+    _upsert(trip_id, fields, event_time)
 
 
-def _handle_hotel(trip_id: str, item: dict) -> None:
+def _handle_hotel(trip_id: str, item: dict, event_time: str) -> None:
     fields = {
         "hotel_name": item.get("hotel_name", ""),
         "check_in_date": item.get("check_in_date", ""),
         "check_out_date": item.get("check_out_date", ""),
         "hotel_status": item.get("status", ""),
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": event_time,
     }
-    update_expr, names, values = _build_update_expression(fields)
-    search_table.update_item(
-        Key={"trip_id": trip_id},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=names,
-        ExpressionAttributeValues=values,
-    )
+    _upsert(trip_id, fields, event_time)
 
 
-def _handle_payment(trip_id: str, item: dict) -> None:
+def _handle_payment(trip_id: str, item: dict, event_time: str) -> None:
     fields = {
-        "total_amount": str(item.get("amount", "0")),
+        "total_amount": item.get("amount", Decimal("0")),  # Decimal のまま保持して Number 型で保存
         "currency": item.get("currency", ""),
         "payment_status": item.get("status", ""),
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": event_time,
     }
-    update_expr, names, values = _build_update_expression(fields)
-    search_table.update_item(
-        Key={"trip_id": trip_id},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=names,
-        ExpressionAttributeValues=values,
-    )
+    _upsert(trip_id, fields, event_time)
 
 
-def _handle_remove(trip_id: str) -> None:
-    search_table.delete_item(Key={"trip_id": trip_id})
+def _handle_remove(trip_id: str, sk: str, event_time: str) -> None:
+    """SK に基づいて該当エンティティのフィールドのみをクリアする"""
+    if sk.startswith("FLIGHT#"):
+        fields = {
+            "flight_number": "",
+            "departure_time": "",
+            "arrival_time": "",
+            "flight_status": "REMOVED",
+            "updated_at": event_time,
+        }
+    elif sk.startswith("HOTEL#"):
+        fields = {
+            "hotel_name": "",
+            "check_in_date": "",
+            "check_out_date": "",
+            "hotel_status": "REMOVED",
+            "updated_at": event_time,
+        }
+    elif sk.startswith("PAYMENT#"):
+        fields = {
+            "total_amount": Decimal("0"),
+            "currency": "",
+            "payment_status": "REMOVED",
+            "updated_at": event_time,
+        }
+    else:
+        return  # TRIP# など対象外エンティティの削除は無視
+    _upsert(trip_id, fields, event_time)
 
 
 def lambda_handler(event: dict, context) -> None:
@@ -489,12 +615,16 @@ def lambda_handler(event: dict, context) -> None:
         event_name = record["eventName"]  # INSERT / MODIFY / REMOVE
         dynamodb_record = record["dynamodb"]
 
+        # Streams の近似イベント時刻を ISO 文字列化（べき等比較に使用）
+        approx_ts: float = dynamodb_record.get("ApproximateCreationDateTime", 0)
+        event_time = datetime.fromtimestamp(approx_ts, tz=timezone.utc).isoformat()
+
         if event_name == "REMOVE":
             old_image = deserialize_image(dynamodb_record["OldImage"])
             pk: str = old_image.get("PK", "")
-            # PK = "TRIP#trip-001" → trip_id = "trip-001"
+            sk: str = old_image.get("SK", "")
             trip_id = pk.removeprefix("TRIP#")
-            _handle_remove(trip_id)
+            _handle_remove(trip_id, sk, event_time)
             continue
 
         new_image = deserialize_image(dynamodb_record["NewImage"])
@@ -503,11 +633,11 @@ def lambda_handler(event: dict, context) -> None:
         trip_id = pk.removeprefix("TRIP#")
 
         if sk.startswith("FLIGHT#"):
-            _handle_flight(trip_id, new_image)
+            _handle_flight(trip_id, new_image, event_time)
         elif sk.startswith("HOTEL#"):
-            _handle_hotel(trip_id, new_image)
+            _handle_hotel(trip_id, new_image, event_time)
         elif sk.startswith("PAYMENT#"):
-            _handle_payment(trip_id, new_image)
+            _handle_payment(trip_id, new_image, event_time)
         # TRIP# など他のエンティティは無視
 ```
 
@@ -800,8 +930,9 @@ aws dynamodb get-item \
 ### 学んだパターン
 
 - **DynamoDB Streams + Lambda**: イベント駆動でテーブル間データ同期を行う標準的なパターン。
-- **TypeDeserializer**: Streams の DynamoDB 型表現を Python dict に変換する際の定石。
-- **update_item による部分更新（upsert）**: 複数のエンティティが別タイミングで書き込まれる場合でも整合性を保つ手法。
+- **TypeDeserializer と型保持**: Streams の DynamoDB 型表現を Python dict に変換する際の定石。`Decimal` はそのまま渡すことで Number 型の整合性を保つ。
+- **SK ベースのエンティティ単位フィールド更新**: REMOVE イベント時も `delete_item` でレコード全体を消さず、SK で対象エンティティを特定して該当フィールドのみをクリアする手法。
+- **ConditionExpression によるべき等性**: at-least-once 配信の Streams で `ApproximateCreationDateTime` を `updated_at` と比較し、古いイベント（重複・順序逆転）をスキップする実装パターン。
 - **CQRS**: 書き込みと読み取りを分離し、それぞれのユースケースに最適化されたデータ構造を設計する原則。
 
 ### 発展課題
