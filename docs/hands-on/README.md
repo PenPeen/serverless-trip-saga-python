@@ -100,3 +100,14 @@ AWS Serverlessサービス (Lambda, Step Functions, DynamoDB) を活用し、Sag
         *   分散トレーシングの確認。
         *   カスタムメトリクスの可視化。
     *   **成果物**: システムの稼働状況を可視化するダッシュボード。
+
+### Phase 7: 検索基盤の追加 (DynamoDB Streams + Search Table)
+**目的**: DynamoDB Streams を使ったイベント駆動の検索用テーブル同期パターンを学ぶ。
+
+*   **`docs/hands-on/15_dynamodb_streams_search_table.md`**
+    *   **内容**:
+        *   DynamoDB Streams の概念とイベント構造の解説。
+        *   検索用テーブル (`TripSearchTable`) の設計と CDK への追加。
+        *   Stream Consumer Lambda で CQRS 的に非正規化ドキュメントを同期する実装。
+        *   複合条件検索（ステータス・出発日範囲）のクエリ Lambda の実装。
+    *   **成果物**: Streams 駆動で自動同期される検索用テーブルと、絞り込み検索 API。
