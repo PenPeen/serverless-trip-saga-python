@@ -25,6 +25,7 @@ class ServerlessTripSagaStack(Stack):
             self,
             "Functions",
             table=database.table,
+            search_table=database.search_table,
             common_layer=layers.common_layer,
         )
 
@@ -62,6 +63,7 @@ class ServerlessTripSagaStack(Stack):
             state_machine=orchestration.state_machine,
             get_trip=fns.get_trip,
             list_trips=fns.list_trips,
+            search_trips=fns.search_trips,
             origin_verify_secret=origin_verify_secret,
         )
 

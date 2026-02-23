@@ -17,6 +17,7 @@ class Api(Construct):
         state_machine: sfn.StateMachine,
         get_trip: _lambda.Function,
         list_trips: _lambda.Function,
+        search_trips: _lambda.Function,
         origin_verify_secret: secretsmanager.ISecret,
     ) -> None:
         super().__init__(scope, id)
@@ -127,5 +128,12 @@ class Api(Construct):
         trip_resource.add_method(
             "GET",
             apigw.LambdaIntegration(get_trip),
+            authorizer=authorizer,
+        )
+
+        # GET /trips/search -> Lambda (search_trips)
+        trips_resource.add_resource("search").add_method(
+            "GET",
+            apigw.LambdaIntegration(search_trips),
             authorizer=authorizer,
         )
