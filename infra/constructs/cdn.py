@@ -7,7 +7,6 @@ from aws_cdk import (
 from aws_cdk import (
     aws_cloudfront_origins as origins,
 )
-from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 
@@ -17,27 +16,21 @@ class Cdn(Construct):
         scope: Construct,
         id: str,
         rest_api: apigw.RestApi,
-        origin_verify_secret: secretsmanager.ISecret,
     ) -> None:
         super().__init__(scope, id)
 
-        # API Gateway をオリジンとして設定（カスタムヘッダーで認証）
-        origin = origins.RestApiOrigin(
-            rest_api,
-            custom_headers={
-                "x-origin-verify": origin_verify_secret.secret_value.unsafe_unwrap()
-            },
-        )
+        # API Gateway をオリジンとして設定
+        origin = origins.RestApiOrigin(rest_api)
 
         self.distribution = cloudfront.Distribution(
             self,
             "Distribution",
             default_behavior=cloudfront.BehaviorOptions(
                 origin=origin,
-                # 全メソッド転送（POST 含む）、キャッシュは GET/HEAD のみ
+                # 全メソッド転送（POST 含む）
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
-                cached_methods=cloudfront.CachedMethods.CACHE_GET_HEAD,
-                cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                # ユーザー認証があるためキャッシュは無効化（安全策）
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 origin_request_policy=cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
             ),

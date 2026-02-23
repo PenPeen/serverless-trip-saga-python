@@ -1,8 +1,8 @@
 from aws_cdk import Duration
 from aws_cdk import aws_apigateway as apigw
+from aws_cdk import aws_cognito as cognito
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as _lambda
-from aws_cdk import aws_secretsmanager as secretsmanager
 from aws_cdk import aws_stepfunctions as sfn
 from constructs import Construct
 
@@ -18,7 +18,7 @@ class Api(Construct):
         get_trip: _lambda.Function,
         list_trips: _lambda.Function,
         search_trips: _lambda.Function,
-        origin_verify_secret: secretsmanager.ISecret,
+        user_pool: cognito.IUserPool,
     ) -> None:
         super().__init__(scope, id)
 
@@ -41,24 +41,13 @@ class Api(Construct):
         )
         state_machine.grant_start_execution(apigw_role)
 
-        # Lambda Authorizer: x-origin-verify ヘッダーで CloudFront 経由のみ許可
-        authorizer_fn = _lambda.Function(
+        # Cognito Authorizer
+        authorizer = apigw.CognitoUserPoolsAuthorizer(
             self,
-            "OriginVerifyAuthorizerFn",
-            runtime=_lambda.Runtime.PYTHON_3_14,
-            handler="authorizer.handler.lambda_handler",
-            code=_lambda.Code.from_asset("src"),
-            environment={
-                "ORIGIN_VERIFY_SECRET_ARN": origin_verify_secret.secret_arn,
-            },
-        )
-        origin_verify_secret.grant_read(authorizer_fn)
-
-        authorizer = apigw.RequestAuthorizer(
-            self,
-            "OriginVerifyAuthorizer",
-            handler=authorizer_fn,
-            identity_sources=[apigw.IdentitySource.header("x-origin-verify")],
+            "TripCognitoAuthorizer",
+            cognito_user_pools=[user_pool],
+            authorizer_name="TripCognitoAuthorizer",
+            identity_source="method.request.header.Authorization",
             results_cache_ttl=Duration.seconds(300),
         )
 
