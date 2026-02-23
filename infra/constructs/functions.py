@@ -1,5 +1,6 @@
 from aws_cdk import aws_dynamodb as dynamodb
 from aws_cdk import aws_lambda as _lambda
+from aws_cdk import aws_lambda_event_sources as event_sources
 from constructs import Construct
 
 
@@ -11,6 +12,7 @@ class Functions(Construct):
         scope: Construct,
         id: str,
         table: dynamodb.Table,
+        search_table: dynamodb.Table,
         common_layer: _lambda.LayerVersion,
     ) -> None:
         super().__init__(scope, id)
@@ -92,6 +94,37 @@ class Functions(Construct):
         table.grant_read_data(self.get_trip)
         table.grant_read_data(self.list_trips)
 
+        self.stream_consumer = self._create_function(
+            "StreamConsumer",
+            "services.trip.handlers.stream_consumer.lambda_handler",
+            "trip-service",
+            table,
+            common_layer,
+        )
+        self.stream_consumer.add_environment(
+            "SEARCH_TABLE_NAME", search_table.table_name
+        )
+        search_table.grant_read_write_data(self.stream_consumer)
+        self.stream_consumer.add_event_source(
+            event_sources.DynamoEventSource(
+                table,
+                starting_position=_lambda.StartingPosition.LATEST,
+                batch_size=10,
+                bisect_batch_on_error=True,
+                retry_attempts=3,
+            )
+        )
+
+        self.search_trips = self._create_function(
+            "SearchTrips",
+            "services.trip.handlers.search_trips.lambda_handler",
+            "trip-service",
+            table,
+            common_layer,
+        )
+        self.search_trips.add_environment("SEARCH_TABLE_NAME", search_table.table_name)
+        search_table.grant_read_data(self.search_trips)
+
         self.all_functions = [
             self.flight_reserve,
             self.flight_cancel,
@@ -101,6 +134,8 @@ class Functions(Construct):
             self.payment_refund,
             self.get_trip,
             self.list_trips,
+            self.stream_consumer,
+            self.search_trips,
         ]
 
     def _create_function(
