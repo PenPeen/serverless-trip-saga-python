@@ -1,4 +1,5 @@
 from .api import Api as Api
+from .auth import Auth as Auth
 from .cdn import Cdn as Cdn
 from .database import Database as Database
 from .deployment import Deployment as Deployment

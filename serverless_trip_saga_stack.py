@@ -1,9 +1,9 @@
 from aws_cdk import Stack
-from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from infra.constructs import (
     Api,
+    Auth,
     Cdn,
     Database,
     Deployment,
@@ -18,6 +18,7 @@ class ServerlessTripSagaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        auth = Auth(self, "Auth")
         database = Database(self, "Database")
         layers = Layers(self, "Layers")
 
@@ -47,16 +48,6 @@ class ServerlessTripSagaStack(Stack):
             payment_process=deployment.payment_process_alias,
         )
 
-        origin_verify_secret = secretsmanager.Secret(
-            self,
-            "OriginVerifySecret",
-            secret_name="/serverless-trip-saga/cloudfront-origin-verify",
-            generate_secret_string=secretsmanager.SecretStringGenerator(
-                exclude_punctuation=True,
-                password_length=32,
-            ),
-        )
-
         api = Api(
             self,
             "Api",
@@ -64,14 +55,13 @@ class ServerlessTripSagaStack(Stack):
             get_trip=fns.get_trip,
             list_trips=fns.list_trips,
             search_trips=fns.search_trips,
-            origin_verify_secret=origin_verify_secret,
+            user_pool=auth.user_pool,
         )
 
         Cdn(
             self,
             "Cdn",
             rest_api=api.rest_api,
-            origin_verify_secret=origin_verify_secret,
         )
 
         Observability(
