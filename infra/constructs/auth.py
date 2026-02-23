@@ -14,7 +14,7 @@ class Auth(Construct):
             self,
             "TripUserPool",
             user_pool_name="trip-user-pool",
-            self_sign_up_enabled=True,  # ユーザー自身のサインアップを許可
+            self_sign_up_enabled=False,  # 管理者のみユーザー作成可能
             sign_in_aliases=cognito.SignInAliases(
                 email=True
             ),  # メールアドレスでログイン
