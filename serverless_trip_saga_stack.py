@@ -86,11 +86,11 @@ class ServerlessTripSagaStack(Stack):
                 },
                 {
                     "id": "AwsSolutions-L1",
-                    "reason": "Lambda runtime version is intentionally fixed for hands-on stability",
+                    "reason": "Runtime version fixed for hands-on stability",
                 },
                 {
                     "id": "AwsSolutions-SF1",
-                    "reason": "Step Functions logging to CloudWatch not required for hands-on",
+                    "reason": "Step Functions CloudWatch logging not required",
                 },
                 {
                     "id": "AwsSolutions-SF2",
@@ -106,7 +106,7 @@ class ServerlessTripSagaStack(Stack):
                 },
                 {
                     "id": "AwsSolutions-COG4",
-                    "reason": "Cognito authorizer integration handled at construct level",
+                    "reason": "Cognito authorizer handled at construct level",
                 },
                 {
                     "id": "AwsSolutions-CFR4",

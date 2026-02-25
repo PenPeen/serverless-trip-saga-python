@@ -75,15 +75,15 @@ class PipelineStack(Stack):
             [
                 {
                     "id": "AwsSolutions-S1",
-                    "reason": "CDK Pipeline artifacts bucket: server access logging not required for hands-on CI/CD pipeline",
+                    "reason": "Pipeline S3: access logs not required for hands-on",
                 },
                 {
                     "id": "AwsSolutions-IAM5",
-                    "reason": "CDK Pipeline auto-generated IAM roles use wildcard permissions for simplicity",
+                    "reason": "CDK Pipeline IAM: wildcard permissions for simplicity",
                 },
                 {
                     "id": "AwsSolutions-CB4",
-                    "reason": "CDK Pipeline CodeBuild projects do not require KMS encryption for hands-on",
+                    "reason": "Pipeline CodeBuild: KMS encryption not required",
                 },
             ],
         )
