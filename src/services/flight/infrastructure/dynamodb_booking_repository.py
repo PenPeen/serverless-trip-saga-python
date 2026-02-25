@@ -3,6 +3,7 @@ from decimal import Decimal
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from services.flight.domain.entity.booking import Booking
@@ -21,7 +22,7 @@ class DynamoDBBookingRepository(BookingRepository):
 
     def __init__(self, table_name: str | None = None) -> None:
         self.table_name = table_name or os.getenv("TABLE_NAME")
-        self.dynamodb = boto3.resource("dynamodb")
+        self.dynamodb = boto3.resource("dynamodb", config=Config(tcp_keepalive=True))
         self.table = self.dynamodb.Table(self.table_name)
 
     def save(self, booking: Booking) -> None:

@@ -5,11 +5,12 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Attr
 from boto3.dynamodb.types import TypeDeserializer
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 deserializer = TypeDeserializer()
 
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", config=Config(tcp_keepalive=True))
 search_table = dynamodb.Table(os.environ["SEARCH_TABLE_NAME"])
 
 

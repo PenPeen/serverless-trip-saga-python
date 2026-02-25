@@ -4,8 +4,9 @@ from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.config import Config
 
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", config=Config(tcp_keepalive=True))
 search_table = dynamodb.Table(os.environ["SEARCH_TABLE_NAME"])
 
 INDEX_NAME = "flight_status-departure_time-index"
