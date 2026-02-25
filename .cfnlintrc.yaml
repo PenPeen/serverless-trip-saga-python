@@ -1,0 +1,7 @@
+# cfn-lint configuration for CDK-generated templates
+# https://github.com/aws-cloudformation/cfn-lint
+ignore_checks:
+  - W3002  # Dynamic references in CDK metadata are intentional
+  - W3005  # DependsOn relationships are CDK-managed
+templates:
+  - cdk.out/*.template.json
