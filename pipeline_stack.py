@@ -6,6 +6,7 @@ from aws_cdk import (
 from aws_cdk import (
     aws_codestarconnections as codestarconnections,
 )
+from cdk_nag import NagSuppressions
 from constructs import Construct
 
 from serverless_trip_saga_stack import ServerlessTripSagaStack
@@ -65,5 +66,24 @@ class PipelineStack(Stack):
                     "PromoteToProd",
                     comment="本番環境へデプロイします。Synth・テスト結果を確認のうえ承認してください。",
                 )
+            ],
+        )
+
+        # cdk-nag: CDK Pipeline が自動生成するリソースの意図的ルール逸脱を抑制
+        NagSuppressions.add_stack_suppressions(
+            self,
+            [
+                {
+                    "id": "AwsSolutions-S1",
+                    "reason": "CDK Pipeline artifacts bucket: server access logging not required for hands-on CI/CD pipeline",
+                },
+                {
+                    "id": "AwsSolutions-IAM5",
+                    "reason": "CDK Pipeline auto-generated IAM roles use wildcard permissions for simplicity",
+                },
+                {
+                    "id": "AwsSolutions-CB4",
+                    "reason": "CDK Pipeline CodeBuild projects do not require KMS encryption for hands-on",
+                },
             ],
         )

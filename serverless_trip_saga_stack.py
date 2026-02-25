@@ -1,4 +1,5 @@
 from aws_cdk import Stack
+from cdk_nag import NagSuppressions
 from constructs import Construct
 
 from infra.constructs import (
@@ -69,4 +70,47 @@ class ServerlessTripSagaStack(Stack):
             "Observability",
             functions=fns.all_functions,
             state_machine=orchestration.state_machine,
+        )
+
+        # cdk-nag: ハンズオン用途の意図的ルール逸脱を抑制
+        NagSuppressions.add_stack_suppressions(
+            self,
+            [
+                {
+                    "id": "AwsSolutions-IAM4",
+                    "reason": "Hands-on app uses AWS managed policies for simplicity",
+                },
+                {
+                    "id": "AwsSolutions-IAM5",
+                    "reason": "Hands-on app uses wildcard IAM policies for simplicity",
+                },
+                {
+                    "id": "AwsSolutions-L1",
+                    "reason": "Lambda runtime version is intentionally fixed for hands-on stability",
+                },
+                {
+                    "id": "AwsSolutions-SF1",
+                    "reason": "Step Functions logging to CloudWatch not required for hands-on",
+                },
+                {
+                    "id": "AwsSolutions-SF2",
+                    "reason": "Step Functions X-Ray tracing not required for hands-on",
+                },
+                {
+                    "id": "AwsSolutions-DDB3",
+                    "reason": "DynamoDB PITR not required for hands-on",
+                },
+                {
+                    "id": "AwsSolutions-APIG2",
+                    "reason": "API Gateway access logging not required for hands-on",
+                },
+                {
+                    "id": "AwsSolutions-COG4",
+                    "reason": "Cognito authorizer integration handled at construct level",
+                },
+                {
+                    "id": "AwsSolutions-CFR4",
+                    "reason": "CloudFront TLS policy is hands-on default",
+                },
+            ],
         )
