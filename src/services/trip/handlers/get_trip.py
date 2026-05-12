@@ -9,13 +9,14 @@ from aws_lambda_powertools.utilities.data_classes import (
 )
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from boto3.dynamodb.conditions import Key
+from botocore.config import Config
 
 from services.shared.utils import api_response
 
 logger = Logger()
 
 TABLE_NAME = os.environ["TABLE_NAME"]
-dynamodb = boto3.resource("dynamodb")
+dynamodb = boto3.resource("dynamodb", config=Config(tcp_keepalive=True))
 table = dynamodb.Table(TABLE_NAME)
 
 

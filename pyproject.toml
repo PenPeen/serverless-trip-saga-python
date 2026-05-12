@@ -48,4 +48,6 @@ dev = [
     "boto3-stubs[dynamodb]",
     "mypy",
     "datadog-cdk-constructs-v2>=1.0.0",
+    "cfn-lint>=1.0",
+    "cdk-nag",
 ]
